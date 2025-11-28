@@ -35,6 +35,7 @@ type Host struct {
 	Error      string        `json:"error"`
 	Name       string        `json:"name"`
 	Status     StatusType    `json:"status,string"`
+	UUID       string        `json:"uuid,omitempty"`
 	UserMacros Macros        `json:"macros,omitempty"`
 
 	// Fields below used only when creating hosts
