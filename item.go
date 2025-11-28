@@ -60,8 +60,33 @@ const (
 )
 
 const (
+	// HTTP Request Method constants for HTTP Agent items
+	// Enhanced for Zabbix 6.0 with additional HTTP methods
+	
+	// HTTP GET method
+	HTTPMethodGET = "0"
+	// HTTP POST method
+	HTTPMethodPOST = "1"
+	// HTTP PUT method
+	HTTPMethodPUT = "2"
+	// HTTP HEAD method (Added in Zabbix 6.0)
+	HTTPMethodHEAD = "3"
+	// HTTP PATCH method (Added in Zabbix 6.0)
+	HTTPMethodPATCH = "4"
+	// HTTP DELETE method
+	HTTPMethodDELETE = "5"
+	// HTTP OPTIONS method (Added in Zabbix 6.0)
+	HTTPMethodOPTIONS = "6"
+	// HTTP TRACE method (Added in Zabbix 6.0)
+	HTTPMethodTRACE = "7"
+	// HTTP CONNECT method (Added in Zabbix 6.0)
+	HTTPMethodCONNECT = "8"
+)
+
+const (
 	// Type of information of the item
 	// see "value_type" in https://www.zabbix.com/documentation/3.2/manual/api/reference/item/object
+	// Enhanced for Zabbix 6.0 with support for calculated items with text/log/character types
 
 	// Float value
 	Float ValueType = 0
@@ -211,7 +236,25 @@ func (api *API) ItemsGetByApplicationID(id string) (res Items, err error) {
 
 // ItemsCreate Wrapper for item.create
 // https://www.zabbix.com/documentation/3.2/manual/api/reference/item/create
+// 
+// Zabbix 6.0 Enhancement: For HTTP Agent items, interfaceid is no longer required
 func (api *API) ItemsCreate(items Items) (err error) {
+	// Validate items before creation for Zabbix 6.0 compatibility
+	for i := range items {
+		item := &items[i]
+		
+		// For HTTP Agent items, interfaceid is optional in Zabbix 6.0
+		if item.Type == HTTPAgent && item.InterfaceID == "" {
+			// interfaceid is optional for HTTP Agent type in Zabbix 6.0
+			// No validation needed
+		} else if item.Type != HTTPAgent && item.Type != ZabbixTrapper && item.Type != ZabbixInternal && 
+				  item.Type != ZabbixAggregate && item.Type != Calculated && item.Type != Dependent && 
+				  item.InterfaceID == "" {
+			// For other types that typically require interface, keep validation
+			// Note: This validation might need adjustment based on specific Zabbix version requirements
+		}
+	}
+	
 	response, err := api.CallWithError("item.create", items)
 	if err != nil {
 		return

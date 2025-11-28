@@ -203,7 +203,7 @@ func (api *API) CallWithErrorParse(method string, params interface{}, result int
 // Login Calls "user.login" API method and fills api.Auth field.
 // This method modifies API structure and should not be called concurrently with other methods.
 func (api *API) Login(user, password string) (auth string, err error) {
-	params := map[string]string{"user": user, "password": password}
+	params := map[string]interface{}{"user": user, "password": password}
 	response, err := api.CallWithError("user.login", params)
 	if err != nil {
 		return
@@ -211,6 +211,67 @@ func (api *API) Login(user, password string) (auth string, err error) {
 
 	auth = response.Result.(string)
 	api.Auth = auth
+	return
+}
+
+// LoginWithToken Calls "user.login" API method with token parameter for Zabbix 6.0 compatibility.
+// This method modifies API structure and should not be called concurrently with other methods.
+func (api *API) LoginWithToken(user, password, token string) (auth string, err error) {
+	params := map[string]interface{}{
+		"user": user,
+		"password": password,
+	}
+	
+	// Add token parameter if provided (Zabbix 6.0 enhancement)
+	if token != "" {
+		params["token"] = token
+	}
+	
+	response, err := api.CallWithError("user.login", params)
+	if err != nil {
+		return
+	}
+
+	auth = response.Result.(string)
+	api.Auth = auth
+	return
+}
+
+// CheckAuthentication Wrapper for user.checkAuthentication with token parameter support.
+// This method is enhanced for Zabbix 6.0 compatibility.
+func (api *API) CheckAuthentication(token string) (valid bool, err error) {
+	params := map[string]interface{}{}
+	
+	// Add token parameter if provided (Zabbix 6.0 enhancement)
+	if token != "" {
+		params["token"] = token
+	}
+	
+	response, err := api.CallWithError("user.checkAuthentication", params)
+	if err != nil {
+		return
+	}
+	
+	if response.Result != nil {
+		valid = true
+	}
+	return
+}
+
+// Logout Calls "user.logout" API method and clears api.Auth field.
+// This method modifies API structure and should not be called concurrently with other methods.
+func (api *API) Logout() (result bool, err error) {
+	response, err := api.CallWithError("user.logout", nil)
+	if err != nil {
+		return
+	}
+	
+	if response.Result != nil {
+		result = response.Result.(bool)
+		if result {
+			api.Auth = ""
+		}
+	}
 	return
 }
 
