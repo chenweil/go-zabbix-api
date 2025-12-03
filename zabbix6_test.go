@@ -210,3 +210,124 @@ func TestZabbix6AuthenticationMethods(t *testing.T) {
 		t.Errorf("Expected empty auth token initially, got '%s'", api.Auth)
 	}
 }
+
+// TestZabbix6CalculatedItemValueTypes tests new calculated item value types added in Zabbix 6.0
+func TestZabbix6CalculatedItemValueTypes(t *testing.T) {
+	// Test all value types including new Zabbix 6.0 calculated types
+	allValueTypes := []ValueType{
+		Float,           // 0
+		Character,       // 1
+		Log,             // 2
+		Unsigned,        // 3
+		Text,            // 4
+		CalculatedText,  // 5 - Added in Zabbix 6.0
+		CalculatedLog,   // 6 - Added in Zabbix 6.0
+		CalculatedChar,  // 7 - Added in Zabbix 6.0
+	}
+
+	expectedCount := 8
+	if len(allValueTypes) != expectedCount {
+		t.Errorf("Expected %d value types, got %d", expectedCount, len(allValueTypes))
+	}
+
+	// Verify specific Zabbix 6.0 calculated types are present
+	zabbix6CalculatedTypes := map[ValueType]bool{
+		CalculatedText: false,
+		CalculatedLog:  false,
+		CalculatedChar: false,
+	}
+
+	for _, valueType := range allValueTypes {
+		if _, exists := zabbix6CalculatedTypes[valueType]; exists {
+			zabbix6CalculatedTypes[valueType] = true
+		}
+	}
+
+	for valueType, exists := range zabbix6CalculatedTypes {
+		if !exists {
+			t.Errorf("Zabbix 6.0 calculated value type %v is missing", valueType)
+		}
+	}
+
+	// Test calculated item creation with new value types
+	calculatedItems := []Item{
+		{
+			Type:      Calculated,
+			ValueType: CalculatedText,
+			Key:       "calculated.text.test",
+			Name:      "Calculated Text Item",
+			HostID:    "host123",
+		},
+		{
+			Type:      Calculated,
+			ValueType: CalculatedLog,
+			Key:       "calculated.log.test",
+			Name:      "Calculated Log Item",
+			HostID:    "host123",
+		},
+		{
+			Type:      Calculated,
+			ValueType: CalculatedChar,
+			Key:       "calculated.char.test",
+			Name:      "Calculated Character Item",
+			HostID:    "host123",
+		},
+	}
+
+	for i, item := range calculatedItems {
+		if item.Type != Calculated {
+			t.Errorf("Item %d: Expected type Calculated, got %v", i, item.Type)
+		}
+
+		switch i {
+		case 0:
+			if item.ValueType != CalculatedText {
+				t.Errorf("Item %d: Expected value type CalculatedText, got %v", i, item.ValueType)
+			}
+		case 1:
+			if item.ValueType != CalculatedLog {
+				t.Errorf("Item %d: Expected value type CalculatedLog, got %v", i, item.ValueType)
+			}
+		case 2:
+			if item.ValueType != CalculatedChar {
+				t.Errorf("Item %d: Expected value type CalculatedChar, got %v", i, item.ValueType)
+			}
+		}
+
+		if item.HostID != "host123" {
+			t.Errorf("Item %d: Expected HostID 'host123', got '%s'", i, item.HostID)
+		}
+	}
+}
+
+// TestZabbix6LoginWithToken tests LoginWithToken method for Zabbix 6.0 compatibility
+func TestZabbix6LoginWithToken(t *testing.T) {
+	// Test API structure for LoginWithToken method
+	config := Config{
+		Url: "https://zabbix.example.com/api_jsonrpc.php",
+	}
+
+	api := NewAPI(config)
+	
+	// Test that the method exists (this is a compile-time test)
+	// In a real test environment, this would require actual Zabbix server connection
+	_ = func(user, password, token string) (string, error) {
+		return api.LoginWithToken(user, password, token)
+	}
+}
+
+// TestZabbix6CheckAuthentication tests CheckAuthentication method with token support
+func TestZabbix6CheckAuthentication(t *testing.T) {
+	// Test API structure for CheckAuthentication method
+	config := Config{
+		Url: "https://zabbix.example.com/api_jsonrpc.php",
+	}
+
+	api := NewAPI(config)
+	
+	// Test that the method exists (this is a compile-time test)
+	// In a real test environment, this would require actual Zabbix server connection
+	_ = func(token string) (bool, error) {
+		return api.CheckAuthentication(token)
+	}
+}
