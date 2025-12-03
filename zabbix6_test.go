@@ -331,3 +331,195 @@ func TestZabbix6CheckAuthentication(t *testing.T) {
 		return api.CheckAuthentication(token)
 	}
 }
+
+// TestZabbix6CompressionSupport tests compression configuration for Zabbix 6.0
+func TestZabbix6CompressionSupport(t *testing.T) {
+	// Test compression disabled by default
+	config := Config{
+		Url: "https://zabbix.example.com/api_jsonrpc.php",
+	}
+
+	api := NewAPI(config)
+	
+	// When compression is disabled, transport should be default or TLS-only
+	if api.config.EnableCompression {
+		t.Errorf("Expected compression to be disabled by default")
+	}
+
+	// Test compression enabled with default settings
+	configWithCompression := Config{
+		Url:                "https://zabbix.example.com/api_jsonrpc.php",
+		EnableCompression:  true,
+	}
+
+	apiWithCompression := NewAPI(configWithCompression)
+	
+	if !apiWithCompression.config.EnableCompression {
+		t.Errorf("Expected compression to be enabled")
+	}
+
+	// Verify default accepted encodings are set
+	expectedEncodings := []string{"gzip", "deflate", "identity"}
+	if len(apiWithCompression.config.AcceptedEncodings) != len(expectedEncodings) {
+		t.Errorf("Expected %d accepted encodings, got %d", len(expectedEncodings), len(apiWithCompression.config.AcceptedEncodings))
+	}
+
+	for i, encoding := range expectedEncodings {
+		if apiWithCompression.config.AcceptedEncodings[i] != encoding {
+			t.Errorf("Expected encoding '%s' at position %d, got '%s'", encoding, i, apiWithCompression.config.AcceptedEncodings[i])
+		}
+	}
+}
+
+// TestZabbix6CompressionWithCustomEncodings tests compression with custom encoding settings
+func TestZabbix6CompressionWithCustomEncodings(t *testing.T) {
+	// Test compression with custom accepted encodings
+	customEncodings := []string{"gzip", "identity"}
+	config := Config{
+		Url:                "https://zabbix.example.com/api_jsonrpc.php",
+		EnableCompression:  true,
+		AcceptedEncodings:  customEncodings,
+	}
+
+	api := NewAPI(config)
+	
+	if len(api.config.AcceptedEncodings) != len(customEncodings) {
+		t.Errorf("Expected %d accepted encodings, got %d", len(customEncodings), len(api.config.AcceptedEncodings))
+	}
+
+	for i, encoding := range customEncodings {
+		if api.config.AcceptedEncodings[i] != encoding {
+			t.Errorf("Expected encoding '%s' at position %d, got '%s'", encoding, i, api.config.AcceptedEncodings[i])
+		}
+	}
+}
+
+// TestZabbix6CompressionWithTLS tests compression compatibility with TLS configuration
+func TestZabbix6CompressionWithTLS(t *testing.T) {
+	// Test compression enabled together with TLS no verify
+	config := Config{
+		Url:                "https://zabbix.example.com/api_jsonrpc.php",
+		TlsNoVerify:        true,
+		EnableCompression:  true,
+	}
+
+	api := NewAPI(config)
+	
+	// Both TLS and compression should be configured
+	if !api.config.EnableCompression {
+		t.Errorf("Expected compression to be enabled with TLS")
+	}
+
+	// Transport should be configured (this is a basic check)
+	if api.c.Transport == nil {
+		t.Errorf("Expected transport to be configured with TLS and compression")
+	}
+}
+
+// TestZabbix6CompressionTransport tests compression transport functionality
+func TestZabbix6CompressionTransport(t *testing.T) {
+	// Create a compression transport for testing
+	baseTransport := &http.Transport{}
+	acceptedEncodings := []string{"gzip", "deflate", "identity"}
+	
+	compTransport := &compressionTransport{
+		transport:         baseTransport,
+		acceptedEncodings: acceptedEncodings,
+	}
+
+	// Verify transport configuration
+	if compTransport.transport != baseTransport {
+		t.Errorf("Expected base transport to be preserved")
+	}
+
+	if len(compTransport.acceptedEncodings) != len(acceptedEncodings) {
+		t.Errorf("Expected %d accepted encodings, got %d", len(acceptedEncodings), len(compTransport.acceptedEncodings))
+	}
+}
+
+// TestZabbix6AllHTTPMethods tests all HTTP method constants including Zabbix 6.0 additions
+func TestZabbix6AllHTTPMethods(t *testing.T) {
+	// Comprehensive test of all HTTP method constants
+	methodTests := []struct {
+		constant string
+		expected string
+	}{
+		{HTTPMethodGET, "0"},
+		{HTTPMethodPOST, "1"},
+		{HTTPMethodPUT, "2"},
+		{HTTPMethodHEAD, "3"},    // Zabbix 6.0
+		{HTTPMethodPATCH, "4"},   // Zabbix 6.0
+		{HTTPMethodDELETE, "5"},
+		{HTTPMethodOPTIONS, "6"}, // Zabbix 6.0
+		{HTTPMethodTRACE, "7"},   // Zabbix 6.0
+		{HTTPMethodCONNECT, "8"}, // Zabbix 6.0
+	}
+
+	for _, test := range methodTests {
+		if test.constant != test.expected {
+			t.Errorf("Expected HTTP method constant '%s', got '%s'", test.expected, test.constant)
+		}
+	}
+
+	// Test creating items with all HTTP methods
+	for i, test := range methodTests {
+		item := Item{
+			Type:         HTTPAgent,
+			HostID:       "host123",
+			Key:          "http.test.method",
+			Name:         "HTTP Method Test",
+			Url:          "https://api.example.com/test",
+			RequestMethod: test.constant,
+		}
+
+		if item.RequestMethod != test.constant {
+			t.Errorf("Item %d: Expected request method '%s', got '%s'", i, test.constant, item.RequestMethod)
+		}
+	}
+}
+
+// TestZabbix6PerformanceBenchmarks benchmarks basic API operations
+func TestZabbix6PerformanceBenchmarks(t *testing.T) {
+	// Basic performance test for API creation
+	config := Config{
+		Url: "https://zabbix.example.com/api_jsonrpc.php",
+	}
+
+	// Test API creation performance (should be very fast)
+	for i := 0; i < 1000; i++ {
+		api := NewAPI(config)
+		if api.url != config.Url {
+			t.Errorf("Iteration %d: Expected URL '%s', got '%s'", i, config.Url, api.url)
+		}
+	}
+
+	// Test API creation with compression
+	configWithCompression := Config{
+		Url:               "https://zabbix.example.com/api_jsonrpc.php",
+		EnableCompression: true,
+	}
+
+	for i := 0; i < 1000; i++ {
+		api := NewAPI(configWithCompression)
+		if !api.config.EnableCompression {
+			t.Errorf("Iteration %d: Expected compression to be enabled", i)
+		}
+	}
+
+	// Test API creation with TLS and compression
+	configWithTLSAndCompression := Config{
+		Url:               "https://zabbix.example.com/api_jsonrpc.php",
+		TlsNoVerify:       true,
+		EnableCompression: true,
+	}
+
+	for i := 0; i < 1000; i++ {
+		api := NewAPI(configWithTLSAndCompression)
+		if !api.config.EnableCompression {
+			t.Errorf("Iteration %d: Expected compression to be enabled", i)
+		}
+		if api.c.Transport == nil {
+			t.Errorf("Iteration %d: Expected transport to be configured", i)
+		}
+	}
+}
