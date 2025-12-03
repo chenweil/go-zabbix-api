@@ -98,6 +98,12 @@ const (
 	Unsigned ValueType = 3
 	// Text value
 	Text ValueType = 4
+	// Calculated Text value (Added in Zabbix 6.0)
+	CalculatedText ValueType = 5
+	// Calculated Log value (Added in Zabbix 6.0)
+	CalculatedLog ValueType = 6
+	// Calculated Character value (Added in Zabbix 6.0)
+	CalculatedChar ValueType = 7
 )
 
 const (
