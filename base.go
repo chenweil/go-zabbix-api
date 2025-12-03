@@ -2,12 +2,15 @@ package zabbix
 
 import (
 	"bytes"
+	"compress/gzip"
+	"compress/zlib"
 	"crypto/tls"
 	"encoding/json"
 	"fmt"
 	"io/ioutil"
 	"log"
 	"net/http"
+	"strings"
 	"sync"
 	"sync/atomic"
 )
@@ -86,6 +89,11 @@ type Config struct {
 	TlsNoVerify bool
 	Log         *log.Logger
 	Serialize   bool
+	// Compression support for Zabbix 6.0
+	// Enable compression for API requests and responses
+	EnableCompression bool
+	// Supported compression encodings (gzip, deflate, identity)
+	AcceptedEncodings []string
 }
 
 // NewAPI Creates new API access object.
@@ -101,6 +109,7 @@ func NewAPI(c Config) (api *API) {
 		config:    c,
 	}
 
+	// Configure TLS settings first
 	if c.TlsNoVerify {
 		tr := &http.Transport{
 			TLSClientConfig: &tls.Config{
@@ -113,12 +122,80 @@ func NewAPI(c Config) (api *API) {
 		api.printf("TLS running in insecure mode, do not use this configuration in production")
 	}
 
+	// Configure compression support for Zabbix 6.0 (after TLS to ensure proper chaining)
+	if c.EnableCompression {
+		api.configureCompression()
+	}
+
 	return
 }
 
 // SetClient Allows one to use specific http.Client, for example with InsecureSkipVerify transport.
 func (api *API) SetClient(c *http.Client) {
 	api.c = *c
+}
+
+// configureCompression adds compression support for Zabbix 6.0 API requests
+// Supports gzip, deflate (zlib), and identity encodings as per libcurl capabilities
+func (api *API) configureCompression() {
+	// Default accepted encodings for libcurl compatibility
+	if len(api.config.AcceptedEncodings) == 0 {
+		api.config.AcceptedEncodings = []string{"gzip", "deflate", "identity"}
+	}
+	
+	// Get existing transport to preserve TLS configuration
+	var baseTransport http.RoundTripper
+	if api.c.Transport != nil {
+		baseTransport = api.c.Transport
+	} else {
+		baseTransport = &http.Transport{}
+	}
+	
+	// Wrap the existing transport with compression handling
+	api.c.Transport = &compressionTransport{
+		transport:         baseTransport,
+		acceptedEncodings: api.config.AcceptedEncodings,
+	}
+	
+	api.printf("Compression enabled with accepted encodings: %v", api.config.AcceptedEncodings)
+}
+
+// compressionTransport handles HTTP compression for requests and responses
+type compressionTransport struct {
+	transport         http.RoundTripper
+	acceptedEncodings []string
+}
+
+func (ct *compressionTransport) RoundTrip(req *http.Request) (*http.Response, error) {
+	// Add Accept-Encoding header
+	if len(ct.acceptedEncodings) > 0 {
+		req.Header.Set("Accept-Encoding", strings.Join(ct.acceptedEncodings, ", "))
+	}
+	
+	// Perform the request
+	resp, err := ct.transport.RoundTrip(req)
+	if err != nil {
+		return nil, err
+	}
+	
+	// Handle compressed response
+	switch resp.Header.Get("Content-Encoding") {
+	case "gzip":
+		resp.Body, err = gzip.NewReader(resp.Body)
+		if err != nil {
+			resp.Body.Close()
+			return nil, err
+		}
+	case "deflate":
+		resp.Body, err = zlib.NewReader(resp.Body)
+		if err != nil {
+			resp.Body.Close()
+			return nil, err
+		}
+	// "identity" means no compression, no handling needed
+	}
+	
+	return resp, nil
 }
 
 func (api *API) printf(format string, v ...interface{}) {
