@@ -152,8 +152,8 @@ type Item struct {
 	TrapperHosts string    `json:"trapper_hosts,omitempty"`
 	UUID         string    `json:"uuid,omitempty"`
 
-	// Fields below used only when creating applications
-	ApplicationIds []string `json:"applications,omitempty"`
+	// Zabbix 6.0 uses Tags instead of Applications
+	Tags Tags `json:"tags,omitempty"`
 
 	ItemParent Hosts `json:"hosts"`
 
@@ -183,6 +183,14 @@ type Item struct {
 	// Dependent Fields
 	MasterItemID string `json:"master_itemid,omitempty"`
 }
+
+// Tag structure for Zabbix 6.0 compatibility (reused from trigger.go)
+type Tag struct {
+	Tag   string `json:"tag"`
+	Value string `json:"value,omitempty"`
+}
+
+type Tags []Tag
 
 type Preprocessors []Preprocessor
 
