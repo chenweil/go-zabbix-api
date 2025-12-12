@@ -38,6 +38,9 @@ type Host struct {
 	UUID       string        `json:"uuid,omitempty"`
 	UserMacros Macros        `json:"macros,omitempty"`
 
+	// Zabbix 6.0 Tags support
+	Tags Tags `json:"tags,omitempty"`
+
 	// Fields below used only when creating hosts
 	GroupIds    HostGroupIDs   `json:"groups,omitempty"`
 	Interfaces  HostInterfaces `json:"interfaces,omitempty"`
@@ -45,6 +48,14 @@ type Host struct {
 	// templates are read back from this one
 	ParentTemplateIDs TemplateIDs `json:"parentTemplates,omitempty"`
 }
+
+// Tag structure for Zabbix 6.0 compatibility (reused from trigger.go)
+type Tag struct {
+	Tag   string `json:"tag"`
+	Value string `json:"value,omitempty"`
+}
+
+type Tags []Tag
 
 // Hosts is an array of Host
 type Hosts []Host
