@@ -18,6 +18,7 @@ const (
 type HostGroup struct {
 	GroupID  string       `json:"groupid,omitempty"`
 	Name     string       `json:"name"`
+	UUID     string       `json:"uuid,omitempty"`
 	Internal InternalType `json:"internal,omitempty,string"`
 }
 

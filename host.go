@@ -1,6 +1,8 @@
 package zabbix
 
-import "encoding/json"
+import (
+	"encoding/json"
+)
 
 type (
 	// AvailableType (readonly) Availability of Zabbix agent
@@ -11,7 +13,11 @@ type (
 	// see "status" in:	https://www.zabbix.com/documentation/3.2/manual/api/reference/host/object
 	StatusType int
 
+	// InventoryMode Inventory mode (from 2.2)
 	InventoryMode int
+
+	// MonitoredBy type for Zabbix 7.0+
+	MonitoredBy int
 )
 
 const (
@@ -24,16 +30,28 @@ const (
 )
 
 const (
-	InventoryDisabled  InventoryMode = -1
-	InventoryManual    InventoryMode = 0
-	InventoryAutomatic InventoryMode = 1
-)
-
-const (
 	// Monitored monitored host(default)
 	Monitored StatusType = 0
 	// Unmonitored unmonitored host
 	Unmonitored StatusType = 1
+)
+
+const (
+	// Disabled inventory mode (default)
+	Disabled InventoryMode = -1
+	// Manual inventory mode
+	Manual InventoryMode = 0
+	// Automatic inventory mode
+	Automatic InventoryMode = 1
+)
+
+const (
+	// Monitored by Zabbix server (default)
+	MonitoredByServer MonitoredBy = 0
+	// Monitored by Zabbix proxy
+	MonitoredByProxy MonitoredBy = 1
+	// Monitored by proxy group (Zabbix 7.0+)
+	MonitoredByProxyGroup MonitoredBy = 2
 )
 
 // Host represent Zabbix host object
@@ -45,11 +63,15 @@ type Host struct {
 	Error      string        `json:"error"`
 	Name       string        `json:"name"`
 	Status     StatusType    `json:"status,string"`
+	UUID       string        `json:"uuid,omitempty"`
 	UserMacros Macros        `json:"macros,omitempty"`
 
 	RawInventory  json.RawMessage `json:"inventory,omitempty"`
 	Inventory     Inventory       `json:"-"`
 	InventoryMode InventoryMode   `json:"inventory_mode,string"`
+
+	// Zabbix 6.0 Tags support
+	Tags Tags `json:"tags,omitempty"`
 
 	// Fields below used only when creating hosts
 	GroupIds         HostGroupIDs   `json:"groups,omitempty"`
@@ -68,6 +90,14 @@ type Host struct {
 // Hosts is an array of Host
 type Hosts []Host
 
+// Tag structure for Zabbix 6.0 compatibility (reused from trigger.go)
+type Tag struct {
+	Tag   string `json:"tag"`
+	Value string `json:"value,omitempty"`
+}
+
+type Tags []Tag
+
 // HostsGet Wrapper for host.get
 // https://www.zabbix.com/documentation/3.2/manual/api/reference/host/get
 func (api *API) HostsGet(params Params) (res Hosts, err error) {
@@ -75,52 +105,6 @@ func (api *API) HostsGet(params Params) (res Hosts, err error) {
 		params["output"] = "extend"
 	}
 	err = api.CallWithErrorParse("host.get", params, &res)
-
-	// fix up host details if present
-	for i := 0; i < len(res); i++ {
-		h := res[i]
-		for j := 0; j < len(h.Interfaces); j++ {
-			in := h.Interfaces[j]
-			res[i].Interfaces[j].Details = nil
-			if len(in.RawDetails) == 0 {
-				continue
-			}
-
-			asStr := string(in.RawDetails)
-			if asStr == "[]" {
-				continue
-			}
-
-			out := HostInterfaceDetail{}
-			// assume singular, if api changes, this will fault
-			err := json.Unmarshal(in.RawDetails, &out)
-			if err != nil {
-				api.printf("got error during unmarshal %s", err)
-				panic(err)
-			}
-			res[i].Interfaces[j].Details = &out
-		}
-
-		// fix up host inventory if present
-		if len(h.RawInventory) == 0 {
-			continue
-		}
-
-		// if its an empty array
-		asStr := string(h.RawInventory)
-		if asStr == "[]" || asStr == "{}" {
-			continue
-		}
-
-		// lets unbox
-		var inv Inventory
-		if err := json.Unmarshal(h.RawInventory, &inv); err != nil {
-			api.printf("got error during unmarshal %s", err)
-			panic(err)
-		}
-		res[i].Inventory = inv
-	}
-
 	return
 }
 
@@ -151,50 +135,13 @@ func (api *API) HostGetByID(id string) (res *Host, err error) {
 		e := ExpectedOneResult(len(hosts))
 		err = &e
 	}
+
 	return
-}
-
-// HostGetByHost Gets host by Host only if there is exactly 1 matching host.
-func (api *API) HostGetByHost(host string) (res *Host, err error) {
-	hosts, err := api.HostsGet(Params{"filter": map[string]string{"host": host}})
-	if err != nil {
-		return
-	}
-
-	if len(hosts) == 1 {
-		res = &hosts[0]
-	} else {
-		e := ExpectedOneResult(len(hosts))
-		err = &e
-	}
-	return
-}
-
-// handle manual marshal
-func prepHosts(hosts Hosts) {
-	for i := 0; i < len(hosts); i++ {
-		h := hosts[i]
-		for j := 0; j < len(h.Interfaces); j++ {
-			in := h.Interfaces[j]
-
-			if in.Details == nil {
-				continue
-			}
-
-			asB, _ := json.Marshal(in.Details)
-			hosts[i].Interfaces[j].RawDetails = json.RawMessage(asB)
-		}
-		if h.Inventory != nil {
-			asB, _ := json.Marshal(h.Inventory)
-			hosts[i].RawInventory = json.RawMessage(asB)
-		}
-	}
 }
 
 // HostsCreate Wrapper for host.create
 // https://www.zabbix.com/documentation/3.2/manual/api/reference/host/create
 func (api *API) HostsCreate(hosts Hosts) (err error) {
-	prepHosts(hosts)
 	response, err := api.CallWithError("host.create", hosts)
 	if err != nil {
 		return
@@ -202,61 +149,134 @@ func (api *API) HostsCreate(hosts Hosts) (err error) {
 
 	result := response.Result.(map[string]interface{})
 	hostids := result["hostids"].([]interface{})
-	for i, id := range hostids {
-		hosts[i].HostID = id.(string)
+
+	for i := range hosts {
+		id := hostids[i].(string)
+		hosts[i].HostID = id
 	}
+
 	return
 }
 
 // HostsUpdate Wrapper for host.update
 // https://www.zabbix.com/documentation/3.2/manual/api/reference/host/update
 func (api *API) HostsUpdate(hosts Hosts) (err error) {
-	prepHosts(hosts)
 	_, err = api.CallWithError("host.update", hosts)
 	return
 }
 
 // HostsDelete Wrapper for host.delete
-// Cleans HostId in all hosts elements if call succeed.
 // https://www.zabbix.com/documentation/3.2/manual/api/reference/host/delete
 func (api *API) HostsDelete(hosts Hosts) (err error) {
 	ids := make([]string, len(hosts))
 	for i, host := range hosts {
 		ids[i] = host.HostID
 	}
-
-	err = api.HostsDeleteByIds(ids)
-	if err == nil {
-		for i := range hosts {
-			hosts[i].HostID = ""
-		}
-	}
+	_, err = api.CallWithError("host.delete", ids)
 	return
 }
 
 // HostsDeleteByIds Wrapper for host.delete
 // https://www.zabbix.com/documentation/3.2/manual/api/reference/host/delete
 func (api *API) HostsDeleteByIds(ids []string) (err error) {
-	hostIds := make([]map[string]string, len(ids))
-	for i, id := range ids {
-		hostIds[i] = map[string]string{"hostid": id}
-	}
+	_, err = api.CallWithError("host.delete", ids)
+	return
+}
 
-	response, err := api.CallWithError("host.delete", hostIds)
-	if err != nil {
-		// Zabbix 2.4 uses new syntax only
-		if e, ok := err.(*Error); ok && e.Code == -32500 {
-			response, err = api.CallWithError("host.delete", ids)
+// Zabbix6HostAdapter implements HostAdapter for Zabbix 6.0
+type Zabbix6HostAdapter struct {
+	api *API
+}
+
+func (adapter *Zabbix6HostAdapter) CreateHosts(hosts Hosts) error {
+	// Prepare hosts for Zabbix 6.0 format
+	for i := range hosts {
+		host := &hosts[i]
+		
+		// Convert Zabbix 7.0 proxy fields to Zabbix 6.0 format if needed
+		if host.ProxyID != "" && host.ProxyHostID == "" {
+			host.ProxyHostID = host.ProxyID
+		}
+		
+		// Clear Zabbix 7.0 specific fields
+		host.MonitoredBy = 0 // Default to server monitoring
+	}
+	
+	return adapter.api.HostsCreate(hosts)
+}
+
+func (adapter *Zabbix6HostAdapter) GetHosts(params Params) (Hosts, error) {
+	return adapter.api.HostsGet(params)
+}
+
+func (adapter *Zabbix6HostAdapter) UpdateHosts(hosts Hosts) error {
+	// Prepare hosts for Zabbix 6.0 format
+	for i := range hosts {
+		host := &hosts[i]
+		
+		// Convert Zabbix 7.0 proxy fields to Zabbix 6.0 format if needed
+		if host.ProxyID != "" && host.ProxyHostID == "" {
+			host.ProxyHostID = host.ProxyID
+		}
+		
+		// Clear Zabbix 7.0 specific fields
+		host.MonitoredBy = 0 // Default to server monitoring
+	}
+	
+	return adapter.api.HostsUpdate(hosts)
+}
+
+func (adapter *Zabbix6HostAdapter) DeleteHosts(hostIds []string) error {
+	return adapter.api.HostsDeleteByIds(hostIds)
+}
+
+// Zabbix7HostAdapter implements HostAdapter for Zabbix 7.0+
+type Zabbix7HostAdapter struct {
+	api *API
+}
+
+func (adapter *Zabbix7HostAdapter) CreateHosts(hosts Hosts) error {
+	// Prepare hosts for Zabbix 7.0 format
+	for i := range hosts {
+		host := &hosts[i]
+		
+		// Convert Zabbix 6.0 proxy fields to Zabbix 7.0 format if needed
+		if host.ProxyHostID != "" && host.ProxyID == "" {
+			host.ProxyID = host.ProxyHostID
+		}
+		
+		// Set monitored_by if proxyid is specified
+		if host.ProxyID != "" && host.MonitoredBy == 0 {
+			host.MonitoredBy = MonitoredByProxy
 		}
 	}
-	if err != nil {
-		return
-	}
+	
+	return adapter.api.HostsCreate(hosts)
+}
 
-	result := response.Result.(map[string]interface{})
-	hostids := result["hostids"].([]interface{})
-	if len(ids) != len(hostids) {
-		err = &ExpectedMore{len(ids), len(hostids)}
+func (adapter *Zabbix7HostAdapter) GetHosts(params Params) (Hosts, error) {
+	return adapter.api.HostsGet(params)
+}
+
+func (adapter *Zabbix7HostAdapter) UpdateHosts(hosts Hosts) error {
+	// Prepare hosts for Zabbix 7.0 format
+	for i := range hosts {
+		host := &hosts[i]
+		
+		// Convert Zabbix 6.0 proxy fields to Zabbix 7.0 format if needed
+		if host.ProxyHostID != "" && host.ProxyID == "" {
+			host.ProxyID = host.ProxyHostID
+		}
+		
+		// Set monitored_by if proxyid is specified
+		if host.ProxyID != "" && host.MonitoredBy == 0 {
+			host.MonitoredBy = MonitoredByProxy
+		}
 	}
-	return
+	
+	return adapter.api.HostsUpdate(hosts)
+}
+
+func (adapter *Zabbix7HostAdapter) DeleteHosts(hostIds []string) error {
+	return adapter.api.HostsDeleteByIds(hostIds)
 }
