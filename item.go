@@ -59,6 +59,8 @@ const (
 	Dependent ItemType = 18
 	HTTPAgent ItemType = 19
 	SNMPAgent ItemType = 20
+	// Browser type (Zabbix 7.0+)
+	Browser ItemType = 22
 )
 
 const (
@@ -105,6 +107,18 @@ const (
 
 type HttpHeaders map[string]string
 
+// MonitoredBy constants for Zabbix 7.0
+type MonitoredBy int
+
+const (
+	// MonitoredByServer - monitored by server
+	MonitoredByServer MonitoredBy = 0
+	// MonitoredByProxy - monitored by proxy
+	MonitoredByProxy MonitoredBy = 1
+	// MonitoredByProxyGroup - monitored by proxy group (Zabbix 7.0+)
+	MonitoredByProxyGroup MonitoredBy = 2
+)
+
 // Item represent Zabbix item object
 // https://www.zabbix.com/documentation/3.2/manual/api/reference/item/object
 type Item struct {
@@ -145,7 +159,11 @@ type Item struct {
 	AuthType      string          `json:"authtype,omitempty"`
 	Username      string          `json:"username,omitempty"`
 	Password      string          `json:"password,omitempty"`
+	
+	// Multi-version headers support
 	Headers       HttpHeaders     `json:"-"`
+	HeadersV6     HttpHeaders     `json:"headers_v6,omitempty"`
+	HeadersV7     []HeaderField   `json:"headers_v7,omitempty"`
 	RawHeaders    json.RawMessage `json:"headers,omitempty"`
 
 	// SNMP Fields
@@ -165,6 +183,15 @@ type Item struct {
 	// Prototype
 	RuleID        string   `json:"ruleid,omitempty"`
 	DiscoveryRule *LLDRule `json:"discoveryRule,omitEmpty"`
+	
+	// Zabbix 7.0+ new fields
+	QueryFieldsV6  map[string]string `json:"query_fields_v6,omitempty"`
+	QueryFieldsV7  []HeaderField     `json:"query_fields_v7,omitempty"`
+	RawQueryFields json.RawMessage   `json:"query_fields,omitempty"`
+	
+	// Browser item specific fields (Zabbix 7.0+)
+	BrowserScript string `json:"browser_script,omitempty"`
+	BrowserParams string `json:"browser_params,omitempty"`
 }
 
 type Preprocessors []Preprocessor
@@ -232,6 +259,8 @@ func (api *API) itemsHeadersUnmarshal(item Items) {
 		}
 
 		item[i].Headers = HttpHeaders{}
+		item[i].HeadersV6 = HttpHeaders{}
+		item[i].HeadersV7 = []HeaderField{}
 
 		if len(h.RawHeaders) == 0 {
 			continue
@@ -242,13 +271,70 @@ func (api *API) itemsHeadersUnmarshal(item Items) {
 			continue
 		}
 
-		out := HttpHeaders{}
-		err := json.Unmarshal(h.RawHeaders, &out)
-		if err != nil {
-			api.printf("got error during unmarshal %s", err)
-			panic(err)
+		// Try to detect format: object (6.0) vs array (7.0)
+		if strings.HasPrefix(asStr, "{") {
+			// Zabbix 6.0 format: object
+			out := HttpHeaders{}
+			err := json.Unmarshal(h.RawHeaders, &out)
+			if err != nil {
+				api.printf("got error during unmarshal %s", err)
+				panic(err)
+			}
+			item[i].Headers = out
+			item[i].HeadersV6 = out
+		} else if strings.HasPrefix(asStr, "[") {
+			// Zabbix 7.0 format: array
+			out := []HeaderField{}
+			err := json.Unmarshal(h.RawHeaders, &out)
+			if err != nil {
+				api.printf("got error during unmarshal %s", err)
+				panic(err)
+			}
+			item[i].HeadersV7 = out
+			// Convert to legacy format for backward compatibility
+			headers := make(HttpHeaders)
+			for _, header := range out {
+				headers[header.Name] = header.Value
+			}
+			item[i].Headers = headers
 		}
-		item[i].Headers = out
+	}
+	
+	// Handle query_fields if present
+	for i := 0; i < len(item); i++ {
+		h := item[i]
+		item[i].QueryFieldsV6 = map[string]string{}
+		item[i].QueryFieldsV7 = []HeaderField{}
+
+		if len(h.RawQueryFields) == 0 {
+			continue
+		}
+
+		asStr := string(h.RawQueryFields)
+		if asStr == "[]" {
+			continue
+		}
+
+		// Try to detect format: object (6.0) vs array (7.0)
+		if strings.HasPrefix(asStr, "{") {
+			// Zabbix 6.0 format: object
+			out := map[string]string{}
+			err := json.Unmarshal(h.RawQueryFields, &out)
+			if err != nil {
+				api.printf("got error during unmarshal query_fields %s", err)
+				panic(err)
+			}
+			item[i].QueryFieldsV6 = out
+		} else if strings.HasPrefix(asStr, "[") {
+			// Zabbix 7.0 format: array
+			out := []HeaderField{}
+			err := json.Unmarshal(h.RawQueryFields, &out)
+			if err != nil {
+				api.printf("got error during unmarshal query_fields %s", err)
+				panic(err)
+			}
+			item[i].QueryFieldsV7 = out
+		}
 	}
 }
 
@@ -262,11 +348,31 @@ func prepItems(item Items) {
 			h.RawApplications = raw
 		}
 
-		if h.Headers == nil {
-			continue
+		// Handle headers based on available format
+		if len(h.HeadersV7) > 0 {
+			// Use 7.0 format
+			asB, _ := json.Marshal(h.HeadersV7)
+			item[i].RawHeaders = json.RawMessage(asB)
+		} else if len(h.HeadersV6) > 0 {
+			// Use 6.0 format
+			asB, _ := json.Marshal(h.HeadersV6)
+			item[i].RawHeaders = json.RawMessage(asB)
+		} else if h.Headers != nil {
+			// Use legacy format
+			asB, _ := json.Marshal(h.Headers)
+			item[i].RawHeaders = json.RawMessage(asB)
 		}
-		asB, _ := json.Marshal(h.Headers)
-		item[i].RawHeaders = json.RawMessage(asB)
+		
+		// Handle query_fields based on available format
+		if len(h.QueryFieldsV7) > 0 {
+			// Use 7.0 format
+			asB, _ := json.Marshal(h.QueryFieldsV7)
+			item[i].RawQueryFields = json.RawMessage(asB)
+		} else if len(h.QueryFieldsV6) > 0 {
+			// Use 6.0 format
+			asB, _ := json.Marshal(h.QueryFieldsV6)
+			item[i].RawQueryFields = json.RawMessage(asB)
+		}
 	}
 }
 
@@ -446,4 +552,80 @@ func (api *API) ProtoItemsDeleteIDs(ids []string) (itemids []interface{}, err er
 		itemids = itemids1
 	}
 	return
+}
+
+// BrowserItem represents specialized browser monitoring item
+type BrowserItem struct {
+	Item
+	BrowserScript string `json:"browser_script"`
+	BrowserParams string `json:"browser_params"`
+}
+
+// BrowserItems is an array of BrowserItem
+type BrowserItems []BrowserItem
+
+// CreateBrowserItems creates browser items (Zabbix 7.0+)
+func (api *API) CreateBrowserItems(items BrowserItems) error {
+	if !api.versionManager.IsFeatureSupported(FeatureBrowserItem) {
+		return fmt.Errorf("Browser items not supported in Zabbix version %s", api.versionManager.GetVersion())
+	}
+
+	// Convert to regular Items for creation
+	regularItems := make(Items, len(items))
+	for i, item := range items {
+		regularItems[i] = item.Item
+		regularItems[i].Type = Browser // Ensure type is set to Browser
+		regularItems[i].BrowserScript = item.BrowserScript
+		regularItems[i].BrowserParams = item.BrowserParams
+	}
+
+	return api.CreateItems(regularItems)
+}
+
+// GetBrowserItems gets browser items (Zabbix 7.0+)
+func (api *API) GetBrowserItems(params Params) (BrowserItems, error) {
+	if !api.versionManager.IsFeatureSupported(FeatureBrowserItem) {
+		return nil, fmt.Errorf("Browser items not supported in Zabbix version %s", api.versionManager.GetVersion())
+	}
+
+	// Filter for browser items
+	if _, present := params["filter"]; !present {
+		params["filter"] = map[string]interface{}{"type": Browser}
+	} else {
+		if filter, ok := params["filter"].(map[string]interface{}); ok {
+			filter["type"] = Browser
+			params["filter"] = filter
+		}
+	}
+
+	items, err := api.GetItems(params)
+	if err != nil {
+		return nil, err
+	}
+
+	// Convert to BrowserItems
+	browserItems := make(BrowserItems, len(items))
+	for i, item := range items {
+		browserItems[i] = BrowserItem{
+			Item:          item,
+			BrowserScript: item.BrowserScript,
+			BrowserParams: item.BrowserParams,
+		}
+	}
+
+	return browserItems, nil
+}
+
+// ValidateBrowserItem validates browser item configuration
+func ValidateBrowserItem(item BrowserItem) error {
+	if item.BrowserScript == "" {
+		return fmt.Errorf("browser_script is required for browser items")
+	}
+
+	if item.Type != Browser {
+		return fmt.Errorf("item type must be Browser (%d)", Browser)
+	}
+
+	// Additional validation for browser script syntax could be added here
+	return nil
 }
