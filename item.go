@@ -54,9 +54,12 @@ const (
 	// Calculated type
 	Calculated ItemType = 15
 	// JMXAgent type
-	JMXAgent  ItemType = 16
-	SNMPTrap  ItemType = 17
+	JMXAgent ItemType = 16
+	// SNMPTrap type
+	SNMPTrap ItemType = 17
+	// Dependent type
 	Dependent ItemType = 18
+	// HTTPAgent type
 	HTTPAgent ItemType = 19
 	SNMPAgent ItemType = 20
 	// Browser type (Zabbix 7.0+)
@@ -64,19 +67,51 @@ const (
 )
 
 const (
+	// HTTP Request Method constants for HTTP Agent items
+	// Enhanced for Zabbix 6.0 with additional HTTP methods
+	
+	// HTTP GET method
+	HTTPMethodGET = "0"
+	// HTTP POST method
+	HTTPMethodPOST = "1"
+	// HTTP PUT method
+	HTTPMethodPUT = "2"
+	// HTTP HEAD method (Added in Zabbix 6.0)
+	HTTPMethodHEAD = "3"
+	// HTTP PATCH method (Added in Zabbix 6.0)
+	HTTPMethodPATCH = "4"
+	// HTTP DELETE method
+	HTTPMethodDELETE = "5"
+	// HTTP OPTIONS method (Added in Zabbix 6.0)
+	HTTPMethodOPTIONS = "6"
+	// HTTP TRACE method (Added in Zabbix 6.0)
+	HTTPMethodTRACE = "7"
+	// HTTP CONNECT method (Added in Zabbix 6.0)
+	HTTPMethodCONNECT = "8"
+)
+
+const (
 	// Type of information of the item
 	// see "value_type" in https://www.zabbix.com/documentation/3.2/manual/api/reference/item/object
 
-	// Float value
-	Float ValueType = 0
-	// Character value
+	// Numeric float (default)
+	NumericFloat ValueType = 0
+	// Character
 	Character ValueType = 1
-	// Log value
+	// Log
 	Log ValueType = 2
-	// Unsigned value
-	Unsigned ValueType = 3
-	// Text value
+	// Numeric unsigned
+	NumericUnsigned ValueType = 3
+	// Text
 	Text ValueType = 4
+	// Binary (not supported)
+	Binary ValueType = 5
+	// Zabbix 6.0: Calculated text (新增)
+	CalculatedText ValueType = 5
+	// Zabbix 6.0: Calculated log (新增)
+	CalculatedLog ValueType = 6
+	// Zabbix 6.0: Calculated character (新增)
+	CalculatedChar ValueType = 7
 )
 
 const (
@@ -105,20 +140,6 @@ const (
 	Delta DeltaType = 2
 )
 
-type HttpHeaders map[string]string
-
-// MonitoredBy constants for Zabbix 7.0
-type MonitoredBy int
-
-const (
-	// MonitoredByServer - monitored by server
-	MonitoredByServer MonitoredBy = 0
-	// MonitoredByProxy - monitored by proxy
-	MonitoredByProxy MonitoredBy = 1
-	// MonitoredByProxyGroup - monitored by proxy group (Zabbix 7.0+)
-	MonitoredByProxyGroup MonitoredBy = 2
-)
-
 // Item represent Zabbix item object
 // https://www.zabbix.com/documentation/3.2/manual/api/reference/item/object
 type Item struct {
@@ -138,44 +159,35 @@ type Item struct {
 	Trends       string    `json:"trends,omitempty"`
 	TrapperHosts string    `json:"trapper_hosts,omitempty"`
 	Params       string    `json:"params,omitempty"`
+	UUID         string    `json:"uuid,omitempty"`
 
-	// list of strings on set, but list of objects on get
-	RawApplications json.RawMessage `json:"applications,omitempty"`
-	Applications    []string        `json:"-"`
+	// Zabbix 6.0 uses Tags instead of Applications
+	Tags Tags `json:"tags,omitempty"`
 
 	ItemParent Hosts `json:"hosts"`
 
 	Preprocessors Preprocessors `json:"preprocessing,omitempty"`
 
 	// HTTP Agent Fields
-	Url           string          `json:"url,omitempty"`
-	RequestMethod string          `json:"request_method,omitempty"`
-	PostType      string          `json:"post_type,omitempty"`
-	Posts         string          `json:"posts,omitempty"`
-	StatusCodes   string          `json:"status_codes,omitempty"`
-	Timeout       string          `json:"timeout,omitempty"`
-	VerifyHost    string          `json:"verify_host,omitempty"`
-	VerifyPeer    string          `json:"verify_peer,omitempty"`
-	AuthType      string          `json:"authtype,omitempty"`
-	Username      string          `json:"username,omitempty"`
-	Password      string          `json:"password,omitempty"`
-	
-	// Multi-version headers support
-	Headers       HttpHeaders     `json:"-"`
-	HeadersV6     HttpHeaders     `json:"headers_v6,omitempty"`
-	HeadersV7     []HeaderField   `json:"headers_v7,omitempty"`
-	RawHeaders    json.RawMessage `json:"headers,omitempty"`
+	Url           string `json:"url,omitempty"`
+	RequestMethod string `json:"request_method,omitempty"`
+	PostType      string `json:"post_type,omitempty"`
+	Posts         string `json:"posts,omitempty"`
+	StatusCodes   string `json:"status_codes,omitempty"`
+	Timeout       string `json:"timeout,omitempty"`
+	VerifyHost    string `json:"verify_host,omitempty"`
+	VerifyPeer    string `json:"verify_peer,omitempty"`
 
 	// SNMP Fields
-	SNMPOid              string `json:"snmp_oid,omitempty"`
-	SNMPCommunity        string `json:"snmp_community,omitempty"`
+	SNMPOid string `json:"snmp_oid,omitempty"`
+	SNMPCommunity string `json:"snmp_community,omitempty"`
 	SNMPv3AuthPassphrase string `json:"snmpv3_authpassphrase,omitempty"`
-	SNMPv3AuthProtocol   string `json:"snmpv3_authprotocol,omitempty"`
-	SNMPv3ContextName    string `json:"snmpv3_contextname,omitempty"`
-	SNMPv3PrivPasshrase  string `json:"snmpv3_privpassphrase,omitempty"`
-	SNMPv3PrivProtocol   string `json:"snmpv3_privprotocol,omitempty"`
-	SNMPv3SecurityLevel  string `json:"snmpv3_securitylevel,omitempty"`
-	SNMPv3SecurityName   string `json:"snmpv3_securityname,omitempty"`
+	SNMPv3AuthProtocol string `json:"snmpv3_authprotocol,omitempty"`
+	SNMPv3ContextName string `json:"snmpv3_contextname,omitempty"`
+	SNMPv3PrivPasshrase string `json:"snmpv3_privpassphrase,omitempty"`
+	SNMPv3PrivProtocol string `json:"snmpv3_privprotocol,omitempty"`
+	SNMPv3SecurityLevel string `json:"snmpv3_securitylevel,omitempty"`
+	SNMPv3SecurityName string `json:"snmpv3_securityname,omitempty"`
 
 	// Dependent Fields
 	MasterItemID string `json:"master_itemid,omitempty"`
@@ -194,29 +206,33 @@ type Item struct {
 	BrowserParams string `json:"browser_params,omitempty"`
 }
 
-type Preprocessors []Preprocessor
-
-type Preprocessor struct {
-	Type               string `json:"type,omitempty"`
-	Params             string `json:"params"`
-	ErrorHandler       string `json:"error_handler,omitempty"`
-	ErrorHandlerParams string `json:"error_handler_params"`
+// Tag structure for Zabbix 6.0 compatibility (reused from trigger.go)
+type Tag struct {
+	Tag   string `json:"tag"`
+	Value string `json:"value,omitempty"`
 }
+
+type Tags []Tag
+
+// HeaderField represents HTTP header field for Zabbix 7.0+ format
+type HeaderField struct {
+	Name  string `json:"name"`
+	Value string `json:"value"`
+}
+
+// HttpHeaders represents HTTP headers for Zabbix 6.0 format
+type HttpHeaders map[string]string
 
 // Items is an array of Item
 type Items []Item
 
-// ByKey Converts slice to map by key. Panics if there are duplicate keys.
-func (items Items) ByKey() (res map[string]Item) {
-	res = make(map[string]Item, len(items))
-	for _, i := range items {
-		_, present := res[i.Key]
-		if present {
-			panic(fmt.Errorf("Duplicate key %s", i.Key))
-		}
-		res[i.Key] = i
-	}
-	return
+type Preprocessors []Preprocessor
+
+type Preprocessor struct {
+	Type               string `json:"type,omitempty"`
+	Params             string `json:"params,omitempty"`
+	ErrorHandler       string `json:"error_handler,omitempty"`
+	ErrorHandlerParams string `json:"error_handler_params,omitempty"`
 }
 
 // ItemsGet Wrapper for item.get
@@ -226,198 +242,65 @@ func (api *API) ItemsGet(params Params) (res Items, err error) {
 		params["output"] = "extend"
 	}
 	err = api.CallWithErrorParse("item.get", params, &res)
-	api.itemsHeadersUnmarshal(res)
-	return
-}
-func (api *API) ProtoItemsGet(params Params) (res Items, err error) {
-	if _, present := params["output"]; !present {
-		params["output"] = "extend"
-	}
-	err = api.CallWithErrorParse("itemprototype.get", params, &res)
-	api.itemsHeadersUnmarshal(res)
 	return
 }
 
-func (api *API) itemsHeadersUnmarshal(item Items) {
-	for i := 0; i < len(item); i++ {
-		h := item[i]
-
-		if len(h.RawApplications) != 0 {
-			asStr := string(h.RawApplications)
-			if asStr != "[]" {
-				var applications Applications
-				err := json.Unmarshal(h.RawApplications, &applications)
-				if err != nil {
-					panic(err)
-				}
-				ids := []string{}
-				for _, a := range applications {
-					ids = append(ids, a.ApplicationID)
-				}
-				item[i].Applications = ids
-			}
-		}
-
-		item[i].Headers = HttpHeaders{}
-		item[i].HeadersV6 = HttpHeaders{}
-		item[i].HeadersV7 = []HeaderField{}
-
-		if len(h.RawHeaders) == 0 {
-			continue
-		}
-
-		asStr := string(h.RawHeaders)
-		if asStr == "[]" {
-			continue
-		}
-
-		// Try to detect format: object (6.0) vs array (7.0)
-		if strings.HasPrefix(asStr, "{") {
-			// Zabbix 6.0 format: object
-			out := HttpHeaders{}
-			err := json.Unmarshal(h.RawHeaders, &out)
-			if err != nil {
-				api.printf("got error during unmarshal %s", err)
-				panic(err)
-			}
-			item[i].Headers = out
-			item[i].HeadersV6 = out
-		} else if strings.HasPrefix(asStr, "[") {
-			// Zabbix 7.0 format: array
-			out := []HeaderField{}
-			err := json.Unmarshal(h.RawHeaders, &out)
-			if err != nil {
-				api.printf("got error during unmarshal %s", err)
-				panic(err)
-			}
-			item[i].HeadersV7 = out
-			// Convert to legacy format for backward compatibility
-			headers := make(HttpHeaders)
-			for _, header := range out {
-				headers[header.Name] = header.Value
-			}
-			item[i].Headers = headers
-		}
-	}
-	
-	// Handle query_fields if present
-	for i := 0; i < len(item); i++ {
-		h := item[i]
-		item[i].QueryFieldsV6 = map[string]string{}
-		item[i].QueryFieldsV7 = []HeaderField{}
-
-		if len(h.RawQueryFields) == 0 {
-			continue
-		}
-
-		asStr := string(h.RawQueryFields)
-		if asStr == "[]" {
-			continue
-		}
-
-		// Try to detect format: object (6.0) vs array (7.0)
-		if strings.HasPrefix(asStr, "{") {
-			// Zabbix 6.0 format: object
-			out := map[string]string{}
-			err := json.Unmarshal(h.RawQueryFields, &out)
-			if err != nil {
-				api.printf("got error during unmarshal query_fields %s", err)
-				panic(err)
-			}
-			item[i].QueryFieldsV6 = out
-		} else if strings.HasPrefix(asStr, "[") {
-			// Zabbix 7.0 format: array
-			out := []HeaderField{}
-			err := json.Unmarshal(h.RawQueryFields, &out)
-			if err != nil {
-				api.printf("got error during unmarshal query_fields %s", err)
-				panic(err)
-			}
-			item[i].QueryFieldsV7 = out
-		}
-	}
+// ItemsGetByHostIds Gets items by host Ids.
+func (api *API) ItemsGetByHostIds(ids []string) (res Items, err error) {
+	return api.ItemsGet(Params{"hostids": ids})
 }
 
-func prepItems(item Items) {
-	for i := 0; i < len(item); i++ {
-		h := item[i]
-
-		if h.Applications != nil {
-			text, _ := json.Marshal(h.Applications)
-			raw := json.RawMessage(text)
-			h.RawApplications = raw
-		}
-
-		// Handle headers based on available format
-		if len(h.HeadersV7) > 0 {
-			// Use 7.0 format
-			asB, _ := json.Marshal(h.HeadersV7)
-			item[i].RawHeaders = json.RawMessage(asB)
-		} else if len(h.HeadersV6) > 0 {
-			// Use 6.0 format
-			asB, _ := json.Marshal(h.HeadersV6)
-			item[i].RawHeaders = json.RawMessage(asB)
-		} else if h.Headers != nil {
-			// Use legacy format
-			asB, _ := json.Marshal(h.Headers)
-			item[i].RawHeaders = json.RawMessage(asB)
-		}
-		
-		// Handle query_fields based on available format
-		if len(h.QueryFieldsV7) > 0 {
-			// Use 7.0 format
-			asB, _ := json.Marshal(h.QueryFieldsV7)
-			item[i].RawQueryFields = json.RawMessage(asB)
-		} else if len(h.QueryFieldsV6) > 0 {
-			// Use 6.0 format
-			asB, _ := json.Marshal(h.QueryFieldsV6)
-			item[i].RawQueryFields = json.RawMessage(asB)
-		}
+// ItemsGetByHosts Gets items by hosts.
+func (api *API) ItemsGetByHosts(hosts Hosts) (res Items, err error) {
+	ids := make([]string, len(hosts))
+	for i, host := range hosts {
+		ids[i] = host.HostID
 	}
+	return api.ItemsGetByHostIds(ids)
 }
 
-// ItemGetByID Gets item by Id only if there is exactly 1 matching host.
+// ItemsGetByApplicationIds Gets items by application Ids.
+func (api *API) ItemsGetByApplicationIds(ids []string) (res Items, err error) {
+	return api.ItemsGet(Params{"applicationids": ids})
+}
+
+// ItemsGetByApplications Gets items by applications.
+func (api *API) ItemsGetByApplications(applications Applications) (res Items, err error) {
+	ids := make([]string, len(applications))
+	for i, application := range applications {
+		ids[i] = application.ApplicationID
+	}
+	return api.ItemsGetByApplicationIds(ids)
+}
+
+// ItemGetByID Gets item by Id only if there is exactly 1 matching item.
 func (api *API) ItemGetByID(id string) (res *Item, err error) {
 	items, err := api.ItemsGet(Params{"itemids": id})
 	if err != nil {
 		return
 	}
 
-	if len(items) != 1 {
+	if len(items) == 1 {
+		res = &items[0]
+	} else {
 		e := ExpectedOneResult(len(items))
 		err = &e
-		return
-	}
-	res = &items[0]
-	return
-}
-func (api *API) ProtoItemGetByID(id string) (res *Item, err error) {
-	items, err := api.ProtoItemsGet(Params{"itemids": id})
-	if err != nil {
-		return
 	}
 
-	if len(items) != 1 {
-		e := ExpectedOneResult(len(items))
-		err = &e
-		return
-	}
-	res = &items[0]
 	return
-}
-
-// ItemsGetByApplicationID Gets items by application Id.
-func (api *API) ItemsGetByApplicationID(id string) (res Items, err error) {
-	return api.ItemsGet(Params{"applicationids": id})
-}
-func (api *API) ProtoItemsGetByApplicationID(id string) (res Items, err error) {
-	return api.ProtoItemsGet(Params{"applicationids": id})
 }
 
 // ItemsCreate Wrapper for item.create
 // https://www.zabbix.com/documentation/3.2/manual/api/reference/item/create
+// 
+// Zabbix 6.0 Enhancement: For HTTP Agent items, interfaceid is no longer required
 func (api *API) ItemsCreate(items Items) (err error) {
-	prepItems(items)
+	// Use adapter pattern for multi-version support
+	if api.itemAdapter != nil {
+		return api.itemAdapter.CreateItems(items)
+	}
+	
+	// Fallback to original implementation
 	response, err := api.CallWithError("item.create", items)
 	if err != nil {
 		return
@@ -425,207 +308,238 @@ func (api *API) ItemsCreate(items Items) (err error) {
 
 	result := response.Result.(map[string]interface{})
 	itemids := result["itemids"].([]interface{})
-	for i, id := range itemids {
-		items[i].ItemID = id.(string)
-	}
-	return
-}
-func (api *API) ProtoItemsCreate(items Items) (err error) {
-	prepItems(items)
-	response, err := api.CallWithError("itemprototype.create", items)
-	if err != nil {
-		return
+
+	for i := range items {
+		id := itemids[i].(string)
+		items[i].ItemID = id
 	}
 
-	result := response.Result.(map[string]interface{})
-	itemids := result["itemids"].([]interface{})
-	for i, id := range itemids {
-		items[i].ItemID = id.(string)
-	}
 	return
 }
 
 // ItemsUpdate Wrapper for item.update
 // https://www.zabbix.com/documentation/3.2/manual/api/reference/item/update
 func (api *API) ItemsUpdate(items Items) (err error) {
-	prepItems(items)
+	// Use adapter pattern for multi-version support
+	if api.itemAdapter != nil {
+		return api.itemAdapter.UpdateItems(items)
+	}
+	
+	// Fallback to original implementation
 	_, err = api.CallWithError("item.update", items)
-	return
-}
-func (api *API) ProtoItemsUpdate(items Items) (err error) {
-	prepItems(items)
-	_, err = api.CallWithError("itemprototype.update", items)
 	return
 }
 
 // ItemsDelete Wrapper for item.delete
-// Cleans ItemId in all items elements if call succeed.
 // https://www.zabbix.com/documentation/3.2/manual/api/reference/item/delete
 func (api *API) ItemsDelete(items Items) (err error) {
 	ids := make([]string, len(items))
 	for i, item := range items {
 		ids[i] = item.ItemID
 	}
-
-	err = api.ItemsDeleteByIds(ids)
-	if err == nil {
-		for i := range items {
-			items[i].ItemID = ""
-		}
-	}
-	return
-}
-func (api *API) ProtoItemsDelete(items Items) (err error) {
-	ids := make([]string, len(items))
-	for i, item := range items {
-		ids[i] = item.ItemID
-	}
-
-	err = api.ProtoItemsDeleteByIds(ids)
-	if err == nil {
-		for i := range items {
-			items[i].ItemID = ""
-		}
-	}
+	_, err = api.CallWithError("item.delete", ids)
 	return
 }
 
 // ItemsDeleteByIds Wrapper for item.delete
 // https://www.zabbix.com/documentation/3.2/manual/api/reference/item/delete
 func (api *API) ItemsDeleteByIds(ids []string) (err error) {
-	deleteIds, err := api.ItemsDeleteIDs(ids)
-	if err != nil {
-		return
+	// Use adapter pattern for multi-version support
+	if api.itemAdapter != nil {
+		return api.itemAdapter.DeleteItems(ids)
 	}
-	l := len(deleteIds)
-	if len(ids) != l {
-		err = &ExpectedMore{len(ids), l}
-	}
-	return
-}
-func (api *API) ProtoItemsDeleteByIds(ids []string) (err error) {
-	deleteIds, err := api.ProtoItemsDeleteIDs(ids)
-	if err != nil {
-		return
-	}
-	l := len(deleteIds)
-	if len(ids) != l {
-		err = &ExpectedMore{len(ids), l}
-	}
+	
+	// Fallback to original implementation
+	_, err = api.CallWithError("item.delete", ids)
 	return
 }
 
-// ItemsDeleteIDs Wrapper for item.delete
-// Delete the item and return the id of the deleted item
-func (api *API) ItemsDeleteIDs(ids []string) (itemids []interface{}, err error) {
-	response, err := api.CallWithError("item.delete", ids)
+// Zabbix6ItemAdapter implements ItemAdapter for Zabbix 6.0
+type Zabbix6ItemAdapter struct {
+	api *API
+}
+
+func (adapter *Zabbix6ItemAdapter) CreateItems(items Items) error {
+	// Prepare items for Zabbix 6.0 format
+	for i := range items {
+		item := &items[i]
+		
+		// Convert HeadersV7 to HeadersV6 if needed
+		if len(item.HeadersV7) > 0 {
+			item.HeadersV6 = make(HttpHeaders)
+			for _, header := range item.HeadersV7 {
+				item.HeadersV6[header.Name] = header.Value
+			}
+			item.HeadersV7 = nil
+		}
+		
+		// Convert QueryFieldsV7 to QueryFieldsV6 if needed
+		if len(item.QueryFieldsV7) > 0 {
+			item.QueryFieldsV6 = make(map[string]string)
+			for _, field := range item.QueryFieldsV7 {
+				item.QueryFieldsV6[field.Name] = field.Value
+			}
+			item.QueryFieldsV7 = nil
+		}
+		
+		// Clear Zabbix 7.0 specific fields
+		item.BrowserScript = ""
+		item.BrowserParams = ""
+	}
+	
+	return adapter.api.createItemsLegacy(items)
+}
+
+func (adapter *Zabbix6ItemAdapter) GetItems(params Params) (Items, error) {
+	return adapter.api.ItemsGet(params)
+}
+
+func (adapter *Zabbix6ItemAdapter) UpdateItems(items Items) error {
+	// Prepare items for Zabbix 6.0 format
+	for i := range items {
+		item := &items[i]
+		
+		// Convert HeadersV7 to HeadersV6 if needed
+		if len(item.HeadersV7) > 0 {
+			item.HeadersV6 = make(HttpHeaders)
+			for _, header := range item.HeadersV7 {
+				item.HeadersV6[header.Name] = header.Value
+			}
+			item.HeadersV7 = nil
+		}
+		
+		// Convert QueryFieldsV7 to QueryFieldsV6 if needed
+		if len(item.QueryFieldsV7) > 0 {
+			item.QueryFieldsV6 = make(map[string]string)
+			for _, field := range item.QueryFieldsV7 {
+				item.QueryFieldsV6[field.Name] = field.Value
+			}
+			item.QueryFieldsV7 = nil
+		}
+		
+		// Clear Zabbix 7.0 specific fields
+		item.BrowserScript = ""
+		item.BrowserParams = ""
+	}
+	
+	return adapter.api.updateItemsLegacy(items)
+}
+
+func (adapter *Zabbix6ItemAdapter) DeleteItems(itemIds []string) error {
+	return adapter.api.ItemsDeleteByIds(itemIds)
+}
+
+// Zabbix7ItemAdapter implements ItemAdapter for Zabbix 7.0+
+type Zabbix7ItemAdapter struct {
+	api *API
+}
+
+func (adapter *Zabbix7ItemAdapter) CreateItems(items Items) error {
+	// Prepare items for Zabbix 7.0 format
+	for i := range items {
+		item := &items[i]
+		
+		// Convert HeadersV6 to HeadersV7 if needed
+		if len(item.HeadersV6) > 0 {
+			item.HeadersV7 = make([]HeaderField, 0, len(item.HeadersV6))
+			for name, value := range item.HeadersV6 {
+				item.HeadersV7 = append(item.HeadersV7, HeaderField{
+					Name:  name,
+					Value: value,
+				})
+			}
+			item.HeadersV6 = nil
+		}
+		
+		// Convert QueryFieldsV6 to QueryFieldsV7 if needed
+		if len(item.QueryFieldsV6) > 0 {
+			item.QueryFieldsV7 = make([]HeaderField, 0, len(item.QueryFieldsV6))
+			for name, value := range item.QueryFieldsV6 {
+				item.QueryFieldsV7 = append(item.QueryFieldsV7, HeaderField{
+					Name:  name,
+					Value: value,
+				})
+			}
+			item.QueryFieldsV6 = nil
+		}
+	}
+	
+	return adapter.api.createItemsLegacy(items)
+}
+
+func (adapter *Zabbix7ItemAdapter) GetItems(params Params) (Items, error) {
+	return adapter.api.ItemsGet(params)
+}
+
+func (adapter *Zabbix7ItemAdapter) UpdateItems(items Items) error {
+	// Prepare items for Zabbix 7.0 format
+	for i := range items {
+		item := &items[i]
+		
+		// Convert HeadersV6 to HeadersV7 if needed
+		if len(item.HeadersV6) > 0 {
+			item.HeadersV7 = make([]HeaderField, 0, len(item.HeadersV6))
+			for name, value := range item.HeadersV6 {
+				item.HeadersV7 = append(item.HeadersV7, HeaderField{
+					Name:  name,
+					Value: value,
+				})
+			}
+			item.HeadersV6 = nil
+		}
+		
+		// Convert QueryFieldsV6 to QueryFieldsV7 if needed
+		if len(item.QueryFieldsV6) > 0 {
+			item.QueryFieldsV7 = make([]HeaderField, 0, len(item.QueryFieldsV6))
+			for name, value := range item.QueryFieldsV6 {
+				item.QueryFieldsV7 = append(item.QueryFieldsV7, HeaderField{
+					Name:  name,
+					Value: value,
+				})
+			}
+			item.QueryFieldsV6 = nil
+		}
+	}
+	
+	return adapter.api.updateItemsLegacy(items)
+}
+
+func (adapter *Zabbix7ItemAdapter) DeleteItems(itemIds []string) error {
+	return adapter.api.ItemsDeleteByIds(itemIds)
+}
+
+// Legacy methods for fallback
+func (api *API) createItemsLegacy(items Items) error {
+	response, err := api.CallWithError("item.create", items)
 	if err != nil {
-		return
+		return err
 	}
 
 	result := response.Result.(map[string]interface{})
-	itemids1, ok := result["itemids"].([]interface{})
-	if !ok {
-		itemids2 := result["itemids"].(map[string]interface{})
-		for _, id := range itemids2 {
-			itemids = append(itemids, id)
-		}
-	} else {
-		itemids = itemids1
-	}
-	return
-}
-func (api *API) ProtoItemsDeleteIDs(ids []string) (itemids []interface{}, err error) {
-	response, err := api.CallWithError("itemprototype.delete", ids)
-	if err != nil {
-		return
+	itemids := result["itemids"].([]interface{})
+
+	for i := range items {
+		id := itemids[i].(string)
+		items[i].ItemID = id
 	}
 
-	result := response.Result.(map[string]interface{})
-	itemids1, ok := result["prototypeids"].([]interface{})
-	if !ok {
-		itemids2 := result["prototypeids"].(map[string]interface{})
-		for _, id := range itemids2 {
-			itemids = append(itemids, id)
-		}
-	} else {
-		itemids = itemids1
-	}
-	return
-}
-
-// BrowserItem represents specialized browser monitoring item
-type BrowserItem struct {
-	Item
-	BrowserScript string `json:"browser_script"`
-	BrowserParams string `json:"browser_params"`
-}
-
-// BrowserItems is an array of BrowserItem
-type BrowserItems []BrowserItem
-
-// CreateBrowserItems creates browser items (Zabbix 7.0+)
-func (api *API) CreateBrowserItems(items BrowserItems) error {
-	if !api.versionManager.IsFeatureSupported(FeatureBrowserItem) {
-		return fmt.Errorf("Browser items not supported in Zabbix version %s", api.versionManager.GetVersion())
-	}
-
-	// Convert to regular Items for creation
-	regularItems := make(Items, len(items))
-	for i, item := range items {
-		regularItems[i] = item.Item
-		regularItems[i].Type = Browser // Ensure type is set to Browser
-		regularItems[i].BrowserScript = item.BrowserScript
-		regularItems[i].BrowserParams = item.BrowserParams
-	}
-
-	return api.CreateItems(regularItems)
-}
-
-// GetBrowserItems gets browser items (Zabbix 7.0+)
-func (api *API) GetBrowserItems(params Params) (BrowserItems, error) {
-	if !api.versionManager.IsFeatureSupported(FeatureBrowserItem) {
-		return nil, fmt.Errorf("Browser items not supported in Zabbix version %s", api.versionManager.GetVersion())
-	}
-
-	// Filter for browser items
-	if _, present := params["filter"]; !present {
-		params["filter"] = map[string]interface{}{"type": Browser}
-	} else {
-		if filter, ok := params["filter"].(map[string]interface{}); ok {
-			filter["type"] = Browser
-			params["filter"] = filter
-		}
-	}
-
-	items, err := api.GetItems(params)
-	if err != nil {
-		return nil, err
-	}
-
-	// Convert to BrowserItems
-	browserItems := make(BrowserItems, len(items))
-	for i, item := range items {
-		browserItems[i] = BrowserItem{
-			Item:          item,
-			BrowserScript: item.BrowserScript,
-			BrowserParams: item.BrowserParams,
-		}
-	}
-
-	return browserItems, nil
-}
-
-// ValidateBrowserItem validates browser item configuration
-func ValidateBrowserItem(item BrowserItem) error {
-	if item.BrowserScript == "" {
-		return fmt.Errorf("browser_script is required for browser items")
-	}
-
-	if item.Type != Browser {
-		return fmt.Errorf("item type must be Browser (%d)", Browser)
-	}
-
-	// Additional validation for browser script syntax could be added here
 	return nil
+}
+
+func (api *API) updateItemsLegacy(items Items) error {
+	_, err := api.CallWithError("item.update", items)
+	return err
+}
+
+// Proxy interface methods for backward compatibility
+func (api *API) CreateItems(items Items) error {
+	return api.ItemsCreate(items)
+}
+
+func (api *API) GetItems(params Params) (Items, error) {
+	return api.ItemsGet(params)
+}
+
+func (api *API) UpdateItems(items Items) error {
+	return api.ItemsUpdate(items)
 }
