@@ -1,5 +1,7 @@
 package zabbix
 
+import "encoding/json"
+
 // MediaType represent Zabbix Media Type object
 // https://www.zabbix.com/documentation/current/manual/api/reference/mediatype/object
 type MediaType struct {
@@ -148,7 +150,13 @@ func (api *API) MediaTypeCreate(mediatypes MediaTypes) (result []string, err err
 		return
 	}
 
-	if resultArray, ok := response.Result.([]interface{}); ok {
+	var rawResult interface{}
+	err = json.Unmarshal(response.Result, &rawResult)
+	if err != nil {
+		return
+	}
+
+	if resultArray, ok := rawResult.([]interface{}); ok {
 		for _, item := range resultArray {
 			if mediaTypeMap, ok := item.(map[string]interface{}); ok {
 				if mediatypeids, exists := mediaTypeMap["mediatypeids"]; exists {
@@ -176,7 +184,13 @@ func (api *API) MediaTypeUpdate(mediatypes MediaTypes) (result []string, err err
 		return
 	}
 
-	if resultArray, ok := response.Result.([]interface{}); ok {
+	var rawResult interface{}
+	err = json.Unmarshal(response.Result, &rawResult)
+	if err != nil {
+		return
+	}
+
+	if resultArray, ok := rawResult.([]interface{}); ok {
 		for _, item := range resultArray {
 			if mediaTypeMap, ok := item.(map[string]interface{}); ok {
 				if mediatypeids, exists := mediaTypeMap["mediatypeids"]; exists {
@@ -204,7 +218,13 @@ func (api *API) MediaTypeDelete(mediaTypeIds []string) (result []string, err err
 		return
 	}
 
-	if resultArray, ok := response.Result.([]interface{}); ok {
+	var rawResult interface{}
+	err = json.Unmarshal(response.Result, &rawResult)
+	if err != nil {
+		return
+	}
+
+	if resultArray, ok := rawResult.([]interface{}); ok {
 		for _, item := range resultArray {
 			if id, ok := item.(string); ok {
 				result = append(result, id)

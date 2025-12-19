@@ -62,10 +62,18 @@ func TestHosts(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	host2, err := api.HostGetByHost(host.Host)
+	hostsByName, err := api.HostsGet(zapi.Params{
+		"filter": zapi.Params{
+			"host": []string{host.Host},
+		},
+	})
 	if err != nil {
 		t.Fatal(err)
 	}
+	if len(hostsByName) != 1 {
+		t.Fatalf("Expected 1 host, got %d", len(hostsByName))
+	}
+	host2 := &hostsByName[0]
 	if !reflect.DeepEqual(host, host2) {
 		t.Errorf("Hosts are not equal:\n%#v\n%#v", host, host2)
 	}

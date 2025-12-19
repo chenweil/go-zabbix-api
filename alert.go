@@ -238,7 +238,7 @@ func (api *API) AlertsCountByStatus() (counts map[string]int, err error) {
 		}
 		
 		var alerts Alerts
-		err = api.AlertsGet(options)
+		alerts, err = api.AlertsGet(options)
 		if err != nil {
 			return
 		}

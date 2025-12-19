@@ -71,6 +71,14 @@ func (e *ExpectedMore) Error() string {
 	return fmt.Sprintf("Expected %d, got %d.", e.Expected, e.Got)
 }
 
+// HistoryData represents history data for History Push API (Zabbix 7.0+)
+type HistoryData struct {
+	Host  string `json:"host"`
+	Key   string `json:"key"`
+	Value string `json:"value"`
+	Clock int64  `json:"clock"`
+}
+
 // API use to store connection information
 type API struct {
 	Auth      string      // auth token, filled by Login()
@@ -81,6 +89,11 @@ type API struct {
 	id        int32
 	ex        sync.Mutex
 	config    Config
+
+	// Version management and adapters
+	versionManager *VersionManager
+	itemAdapter    ItemAdapter
+	hostAdapter    HostAdapter
 }
 
 type Config struct {
@@ -130,25 +143,31 @@ func NewAPI(c Config) (api *API) {
 func (api *API) configureCompression() {
 	// Create a custom transport that handles compression
 	transport := &http.Transport{}
-	
+
 	// Configure TLS if needed
 	if api.config.TlsNoVerify {
 		transport.TLSClientConfig = &tls.Config{InsecureSkipVerify: true}
 	}
-	
+
+	encodings := api.config.AcceptedEncodings
+	if len(encodings) == 0 {
+		encodings = []string{"gzip", "deflate", "identity"}
+		api.config.AcceptedEncodings = encodings
+	}
+
 	// Wrap with compression transport
 	api.c.Transport = &compressionTransport{
-		transport:        transport,
-		acceptedEncodings: api.config.AcceptedEncodings,
-		logger:          api.Logger,
+		transport:         transport,
+		acceptedEncodings: encodings,
+		logger:            api.Logger,
 	}
 }
 
 // compressionTransport handles HTTP compression for Zabbix 6.0+
 type compressionTransport struct {
-	transport        http.RoundTripper
+	transport         http.RoundTripper
 	acceptedEncodings []string
-	logger          *log.Logger
+	logger            *log.Logger
 }
 
 func (ct *compressionTransport) RoundTrip(req *http.Request) (*http.Response, error) {
@@ -156,13 +175,13 @@ func (ct *compressionTransport) RoundTrip(req *http.Request) (*http.Response, er
 	if len(ct.acceptedEncodings) > 0 {
 		req.Header.Set("Accept-Encoding", strings.Join(ct.acceptedEncodings, ", "))
 	}
-	
+
 	// Make the request
 	resp, err := ct.transport.RoundTrip(req)
 	if err != nil {
 		return resp, err
 	}
-	
+
 	return resp, nil
 }
 
@@ -178,9 +197,12 @@ func (api *API) Login(user, pass string) (auth string, err error) {
 		return
 	}
 
-	auth = response.Result.(string)
+	err = json.Unmarshal(response.Result, &auth)
+	if err != nil {
+		return
+	}
 	api.Auth = auth
-	
+
 	// Auto-detect Zabbix version after successful login
 	if api.versionManager.serverVersion == "" {
 		_, err = api.DetectVersion()
@@ -205,7 +227,10 @@ func (api *API) LoginWithToken(user, password, token string) (auth string, err e
 		return
 	}
 
-	auth = response.Result.(string)
+	err = json.Unmarshal(response.Result, &auth)
+	if err != nil {
+		return
+	}
 	api.Auth = auth
 
 	// Auto-detect Zabbix version after successful login
@@ -227,7 +252,12 @@ func (api *API) CheckAuthentication(token string) (valid bool, err error) {
 		return
 	}
 
-	valid = response.Result.(string) == "true"
+	var result string
+	err = json.Unmarshal(response.Result, &result)
+	if err != nil {
+		return
+	}
+	valid = result == "true"
 	return
 }
 
@@ -247,7 +277,7 @@ func (api *API) Version() (version string, err error) {
 		return
 	}
 
-	version = response.Result.(string)
+	err = json.Unmarshal(response.Result, &version)
 	return
 }
 
@@ -259,8 +289,11 @@ func (api *API) DetectVersion() (string, error) {
 	}
 
 	// Parse version and set flags
+	if api.versionManager == nil {
+		api.versionManager = NewVersionManager()
+	}
 	api.versionManager.SetVersion(version)
-	
+
 	// Initialize appropriate adapters based on version
 	api.initializeAdapters()
 
@@ -269,6 +302,9 @@ func (api *API) DetectVersion() (string, error) {
 
 // initializeAdapters sets up the appropriate adapters based on Zabbix version
 func (api *API) initializeAdapters() {
+	if api.versionManager == nil {
+		api.versionManager = NewVersionManager()
+	}
 	if api.versionManager.IsZabbix7() {
 		api.itemAdapter = &Zabbix7ItemAdapter{api: api}
 		api.hostAdapter = &Zabbix7HostAdapter{api: api}
@@ -280,22 +316,74 @@ func (api *API) initializeAdapters() {
 
 // GetServerVersion returns the detected Zabbix server version
 func (api *API) GetServerVersion() string {
+	if api.versionManager == nil {
+		return ""
+	}
 	return api.versionManager.serverVersion
 }
 
 // IsZabbix7 returns true if connected to Zabbix 7.0+
 func (api *API) IsZabbix7() bool {
+	if api.versionManager == nil {
+		return false
+	}
 	return api.versionManager.IsZabbix7()
 }
 
 // IsZabbix6 returns true if connected to Zabbix 6.0
 func (api *API) IsZabbix6() bool {
+	if api.versionManager == nil {
+		return false
+	}
 	return api.versionManager.IsZabbix6()
 }
 
 // SupportsFeature checks if a specific feature is supported by the current Zabbix version
 func (api *API) SupportsFeature(feature string) bool {
+	if api.versionManager == nil {
+		return false
+	}
 	return api.versionManager.IsFeatureSupported(feature)
+}
+
+// IsFeatureSupported checks if a specific feature is supported (alias for SupportsFeature)
+func (api *API) IsFeatureSupported(feature string) bool {
+	if api.versionManager == nil {
+		return false
+	}
+	return api.versionManager.IsFeatureSupported(feature)
+}
+
+// ForceVersion manually sets the Zabbix version (useful for testing)
+func (api *API) ForceVersion(version string) error {
+	if api.versionManager == nil {
+		api.versionManager = NewVersionManager()
+	}
+	api.versionManager.SetVersion(version)
+	api.initializeAdapters()
+	return nil
+}
+
+// GetItemAdapter returns the current item adapter
+func (api *API) GetItemAdapter() ItemAdapter {
+	return api.itemAdapter
+}
+
+// GetHostAdapter returns the current host adapter
+func (api *API) GetHostAdapter() HostAdapter {
+	return api.hostAdapter
+}
+
+// GetSupportedFeatures returns a map of all supported features
+func (api *API) GetSupportedFeatures() map[string]bool {
+	result := make(map[string]bool)
+	if api.versionManager == nil {
+		return result
+	}
+	for k, v := range api.versionManager.supportedFeatures {
+		result[k] = v
+	}
+	return result
 }
 
 // SupportsMFA returns true if MFA is supported (Zabbix 7.0+)
@@ -316,6 +404,15 @@ func (api *API) SupportsHistoryPush() bool {
 // SupportsBrowserItem returns true if Browser Item type is supported (Zabbix 7.0+)
 func (api *API) SupportsBrowserItem() bool {
 	return api.SupportsFeature(FeatureBrowserItem)
+}
+
+// SetClient sets the HTTP client used for API requests.
+// Passing nil leaves the current client unchanged.
+func (api *API) SetClient(client *http.Client) {
+	if client == nil {
+		return
+	}
+	api.c = *client
 }
 
 // CallWithError makes a JSON-RPC call to Zabbix API and returns the raw response.
@@ -405,11 +502,11 @@ func (api *API) Call(method string, params interface{}) (result interface{}, err
 
 // VersionManager handles Zabbix version detection and feature support
 type VersionManager struct {
-	serverVersion    string
-	majorVersion     int
-	minorVersion     int
-	isZabbix6        bool
-	isZabbix7        bool
+	serverVersion     string
+	majorVersion      int
+	minorVersion      int
+	isZabbix6         bool
+	isZabbix7         bool
 	supportedFeatures map[string]bool
 }
 
@@ -439,7 +536,7 @@ func (vm *VersionManager) parseVersion() {
 			vm.minorVersion = minor
 		}
 	}
-	
+
 	vm.isZabbix6 = vm.majorVersion == 6
 	vm.isZabbix7 = vm.majorVersion == 7
 }
@@ -452,7 +549,7 @@ func (vm *VersionManager) initializeFeatureSupport() {
 	vm.supportedFeatures[FeatureCompression] = vm.isZabbix6 || vm.isZabbix7
 	vm.supportedFeatures[FeatureHTTPMethods] = vm.isZabbix6 || vm.isZabbix7
 	vm.supportedFeatures[FeatureCalculatedItemTypes] = vm.isZabbix6 || vm.isZabbix7
-	
+
 	// Zabbix 7.0+ features
 	vm.supportedFeatures[FeatureMFA] = vm.isZabbix7
 	vm.supportedFeatures[FeatureProxyGroup] = vm.isZabbix7
@@ -476,6 +573,21 @@ func (vm *VersionManager) IsZabbix7() bool {
 func (vm *VersionManager) IsFeatureSupported(feature string) bool {
 	supported, exists := vm.supportedFeatures[feature]
 	return exists && supported
+}
+
+// ForceVersion manually sets a version for testing purposes
+func (vm *VersionManager) ForceVersion(version string) {
+	vm.SetVersion(version)
+}
+
+// Is60 returns true if the version is Zabbix 6.0
+func (vm *VersionManager) Is60() bool {
+	return vm.IsZabbix6()
+}
+
+// Is70 returns true if the version is Zabbix 7.0
+func (vm *VersionManager) Is70() bool {
+	return vm.IsZabbix7()
 }
 
 // Feature constants for Zabbix versions
@@ -510,8 +622,8 @@ type HostAdapter interface {
 
 // Adapter implementations will be added in respective files
 var (
-	itemAdapter ItemAdapter
-	hostAdapter HostAdapter
+	itemAdapter    ItemAdapter
+	hostAdapter    HostAdapter
 	versionManager *VersionManager
 )
 

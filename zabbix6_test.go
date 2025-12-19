@@ -1,6 +1,7 @@
 package zabbix
 
 import (
+	"net/http"
 	"testing"
 )
 
@@ -141,8 +142,6 @@ func TestZabbix6UserGetOptions(t *testing.T) {
 	}
 
 	// Verify the default fields that should be accessible in Zabbix 6.0
-	expectedDefaultFields := []string{"userid", "username", "name", "surname", "roleid"}
-	
 	// This would normally be set by the API method
 	// Here we just verify the structure is correct
 	if len(options.UserIDs) != 1 {
@@ -162,8 +161,6 @@ func TestZabbix6MediaTypeGetOptions(t *testing.T) {
 	}
 
 	// Verify the default fields that should be accessible to Admin users in Zabbix 6.0
-	expectedDefaultFields := []string{"mediatypeid", "name", "type", "status", "maxattempts"}
-	
 	if len(options.MediaTypeIDs) != 1 {
 		t.Errorf("Expected 1 media type ID, got %d", len(options.MediaTypeIDs))
 	}
@@ -181,8 +178,6 @@ func TestZabbix6AlertGetOptions(t *testing.T) {
 	}
 
 	// Verify the default fields that should be accessible to Admin users in Zabbix 6.0
-	expectedDefaultFields := []string{"alertid", "actionid", "eventid", "clock", "status"}
-	
 	if len(options.AlertIDs) != 1 {
 		t.Errorf("Expected 1 alert ID, got %d", len(options.AlertIDs))
 	}
@@ -215,10 +210,10 @@ func TestZabbix6AuthenticationMethods(t *testing.T) {
 func TestZabbix6CalculatedItemValueTypes(t *testing.T) {
 	// Test all value types including new Zabbix 6.0 calculated types
 	allValueTypes := []ValueType{
-		Float,           // 0
+		NumericFloat,    // 0
 		Character,       // 1
 		Log,             // 2
-		Unsigned,        // 3
+		NumericUnsigned, // 3
 		Text,            // 4
 		CalculatedText,  // 5 - Added in Zabbix 6.0
 		CalculatedLog,   // 6 - Added in Zabbix 6.0

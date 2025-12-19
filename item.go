@@ -69,7 +69,7 @@ const (
 const (
 	// HTTP Request Method constants for HTTP Agent items
 	// Enhanced for Zabbix 6.0 with additional HTTP methods
-	
+
 	// HTTP GET method
 	HTTPMethodGET = "0"
 	// HTTP POST method
@@ -177,17 +177,19 @@ type Item struct {
 	Timeout       string `json:"timeout,omitempty"`
 	VerifyHost    string `json:"verify_host,omitempty"`
 	VerifyPeer    string `json:"verify_peer,omitempty"`
+	HeadersV6     HttpHeaders   `json:"headers_v6,omitempty"`  // Zabbix 6.0 format
+	HeadersV7     []HeaderField `json:"headers_v7,omitempty"`  // Zabbix 7.0+ format
 
 	// SNMP Fields
-	SNMPOid string `json:"snmp_oid,omitempty"`
-	SNMPCommunity string `json:"snmp_community,omitempty"`
+	SNMPOid              string `json:"snmp_oid,omitempty"`
+	SNMPCommunity        string `json:"snmp_community,omitempty"`
 	SNMPv3AuthPassphrase string `json:"snmpv3_authpassphrase,omitempty"`
-	SNMPv3AuthProtocol string `json:"snmpv3_authprotocol,omitempty"`
-	SNMPv3ContextName string `json:"snmpv3_contextname,omitempty"`
-	SNMPv3PrivPasshrase string `json:"snmpv3_privpassphrase,omitempty"`
-	SNMPv3PrivProtocol string `json:"snmpv3_privprotocol,omitempty"`
-	SNMPv3SecurityLevel string `json:"snmpv3_securitylevel,omitempty"`
-	SNMPv3SecurityName string `json:"snmpv3_securityname,omitempty"`
+	SNMPv3AuthProtocol   string `json:"snmpv3_authprotocol,omitempty"`
+	SNMPv3ContextName    string `json:"snmpv3_contextname,omitempty"`
+	SNMPv3PrivPasshrase  string `json:"snmpv3_privpassphrase,omitempty"`
+	SNMPv3PrivProtocol   string `json:"snmpv3_privprotocol,omitempty"`
+	SNMPv3SecurityLevel  string `json:"snmpv3_securitylevel,omitempty"`
+	SNMPv3SecurityName   string `json:"snmpv3_securityname,omitempty"`
 
 	// Dependent Fields
 	MasterItemID string `json:"master_itemid,omitempty"`
@@ -195,24 +197,16 @@ type Item struct {
 	// Prototype
 	RuleID        string   `json:"ruleid,omitempty"`
 	DiscoveryRule *LLDRule `json:"discoveryRule,omitEmpty"`
-	
+
 	// Zabbix 7.0+ new fields
 	QueryFieldsV6  map[string]string `json:"query_fields_v6,omitempty"`
 	QueryFieldsV7  []HeaderField     `json:"query_fields_v7,omitempty"`
 	RawQueryFields json.RawMessage   `json:"query_fields,omitempty"`
-	
+
 	// Browser item specific fields (Zabbix 7.0+)
 	BrowserScript string `json:"browser_script,omitempty"`
 	BrowserParams string `json:"browser_params,omitempty"`
 }
-
-// Tag structure for Zabbix 6.0 compatibility (reused from trigger.go)
-type Tag struct {
-	Tag   string `json:"tag"`
-	Value string `json:"value,omitempty"`
-}
-
-type Tags []Tag
 
 // HeaderField represents HTTP header field for Zabbix 7.0+ format
 type HeaderField struct {
@@ -225,6 +219,11 @@ type HttpHeaders map[string]string
 
 // Items is an array of Item
 type Items []Item
+
+// BrowserItem represents a Browser monitoring item (Zabbix 7.0+)
+type BrowserItem struct {
+	Item
+}
 
 type Preprocessors []Preprocessor
 
@@ -259,20 +258,6 @@ func (api *API) ItemsGetByHosts(hosts Hosts) (res Items, err error) {
 	return api.ItemsGetByHostIds(ids)
 }
 
-// ItemsGetByApplicationIds Gets items by application Ids.
-func (api *API) ItemsGetByApplicationIds(ids []string) (res Items, err error) {
-	return api.ItemsGet(Params{"applicationids": ids})
-}
-
-// ItemsGetByApplications Gets items by applications.
-func (api *API) ItemsGetByApplications(applications Applications) (res Items, err error) {
-	ids := make([]string, len(applications))
-	for i, application := range applications {
-		ids[i] = application.ApplicationID
-	}
-	return api.ItemsGetByApplicationIds(ids)
-}
-
 // ItemGetByID Gets item by Id only if there is exactly 1 matching item.
 func (api *API) ItemGetByID(id string) (res *Item, err error) {
 	items, err := api.ItemsGet(Params{"itemids": id})
@@ -292,21 +277,25 @@ func (api *API) ItemGetByID(id string) (res *Item, err error) {
 
 // ItemsCreate Wrapper for item.create
 // https://www.zabbix.com/documentation/3.2/manual/api/reference/item/create
-// 
+//
 // Zabbix 6.0 Enhancement: For HTTP Agent items, interfaceid is no longer required
 func (api *API) ItemsCreate(items Items) (err error) {
 	// Use adapter pattern for multi-version support
 	if api.itemAdapter != nil {
 		return api.itemAdapter.CreateItems(items)
 	}
-	
+
 	// Fallback to original implementation
 	response, err := api.CallWithError("item.create", items)
 	if err != nil {
 		return
 	}
 
-	result := response.Result.(map[string]interface{})
+	var result map[string]interface{}
+	err = json.Unmarshal(response.Result, &result)
+	if err != nil {
+		return
+	}
 	itemids := result["itemids"].([]interface{})
 
 	for i := range items {
@@ -324,7 +313,7 @@ func (api *API) ItemsUpdate(items Items) (err error) {
 	if api.itemAdapter != nil {
 		return api.itemAdapter.UpdateItems(items)
 	}
-	
+
 	// Fallback to original implementation
 	_, err = api.CallWithError("item.update", items)
 	return
@@ -348,7 +337,7 @@ func (api *API) ItemsDeleteByIds(ids []string) (err error) {
 	if api.itemAdapter != nil {
 		return api.itemAdapter.DeleteItems(ids)
 	}
-	
+
 	// Fallback to original implementation
 	_, err = api.CallWithError("item.delete", ids)
 	return
@@ -363,7 +352,7 @@ func (adapter *Zabbix6ItemAdapter) CreateItems(items Items) error {
 	// Prepare items for Zabbix 6.0 format
 	for i := range items {
 		item := &items[i]
-		
+
 		// Convert HeadersV7 to HeadersV6 if needed
 		if len(item.HeadersV7) > 0 {
 			item.HeadersV6 = make(HttpHeaders)
@@ -372,7 +361,7 @@ func (adapter *Zabbix6ItemAdapter) CreateItems(items Items) error {
 			}
 			item.HeadersV7 = nil
 		}
-		
+
 		// Convert QueryFieldsV7 to QueryFieldsV6 if needed
 		if len(item.QueryFieldsV7) > 0 {
 			item.QueryFieldsV6 = make(map[string]string)
@@ -381,12 +370,12 @@ func (adapter *Zabbix6ItemAdapter) CreateItems(items Items) error {
 			}
 			item.QueryFieldsV7 = nil
 		}
-		
+
 		// Clear Zabbix 7.0 specific fields
 		item.BrowserScript = ""
 		item.BrowserParams = ""
 	}
-	
+
 	return adapter.api.createItemsLegacy(items)
 }
 
@@ -398,7 +387,7 @@ func (adapter *Zabbix6ItemAdapter) UpdateItems(items Items) error {
 	// Prepare items for Zabbix 6.0 format
 	for i := range items {
 		item := &items[i]
-		
+
 		// Convert HeadersV7 to HeadersV6 if needed
 		if len(item.HeadersV7) > 0 {
 			item.HeadersV6 = make(HttpHeaders)
@@ -407,7 +396,7 @@ func (adapter *Zabbix6ItemAdapter) UpdateItems(items Items) error {
 			}
 			item.HeadersV7 = nil
 		}
-		
+
 		// Convert QueryFieldsV7 to QueryFieldsV6 if needed
 		if len(item.QueryFieldsV7) > 0 {
 			item.QueryFieldsV6 = make(map[string]string)
@@ -416,12 +405,12 @@ func (adapter *Zabbix6ItemAdapter) UpdateItems(items Items) error {
 			}
 			item.QueryFieldsV7 = nil
 		}
-		
+
 		// Clear Zabbix 7.0 specific fields
 		item.BrowserScript = ""
 		item.BrowserParams = ""
 	}
-	
+
 	return adapter.api.updateItemsLegacy(items)
 }
 
@@ -438,7 +427,7 @@ func (adapter *Zabbix7ItemAdapter) CreateItems(items Items) error {
 	// Prepare items for Zabbix 7.0 format
 	for i := range items {
 		item := &items[i]
-		
+
 		// Convert HeadersV6 to HeadersV7 if needed
 		if len(item.HeadersV6) > 0 {
 			item.HeadersV7 = make([]HeaderField, 0, len(item.HeadersV6))
@@ -450,7 +439,7 @@ func (adapter *Zabbix7ItemAdapter) CreateItems(items Items) error {
 			}
 			item.HeadersV6 = nil
 		}
-		
+
 		// Convert QueryFieldsV6 to QueryFieldsV7 if needed
 		if len(item.QueryFieldsV6) > 0 {
 			item.QueryFieldsV7 = make([]HeaderField, 0, len(item.QueryFieldsV6))
@@ -463,7 +452,7 @@ func (adapter *Zabbix7ItemAdapter) CreateItems(items Items) error {
 			item.QueryFieldsV6 = nil
 		}
 	}
-	
+
 	return adapter.api.createItemsLegacy(items)
 }
 
@@ -475,7 +464,7 @@ func (adapter *Zabbix7ItemAdapter) UpdateItems(items Items) error {
 	// Prepare items for Zabbix 7.0 format
 	for i := range items {
 		item := &items[i]
-		
+
 		// Convert HeadersV6 to HeadersV7 if needed
 		if len(item.HeadersV6) > 0 {
 			item.HeadersV7 = make([]HeaderField, 0, len(item.HeadersV6))
@@ -487,7 +476,7 @@ func (adapter *Zabbix7ItemAdapter) UpdateItems(items Items) error {
 			}
 			item.HeadersV6 = nil
 		}
-		
+
 		// Convert QueryFieldsV6 to QueryFieldsV7 if needed
 		if len(item.QueryFieldsV6) > 0 {
 			item.QueryFieldsV7 = make([]HeaderField, 0, len(item.QueryFieldsV6))
@@ -500,7 +489,7 @@ func (adapter *Zabbix7ItemAdapter) UpdateItems(items Items) error {
 			item.QueryFieldsV6 = nil
 		}
 	}
-	
+
 	return adapter.api.updateItemsLegacy(items)
 }
 
@@ -515,7 +504,11 @@ func (api *API) createItemsLegacy(items Items) error {
 		return err
 	}
 
-	result := response.Result.(map[string]interface{})
+	var result map[string]interface{}
+	err = json.Unmarshal(response.Result, &result)
+	if err != nil {
+		return err
+	}
 	itemids := result["itemids"].([]interface{})
 
 	for i := range items {
@@ -542,4 +535,50 @@ func (api *API) GetItems(params Params) (Items, error) {
 
 func (api *API) UpdateItems(items Items) error {
 	return api.ItemsUpdate(items)
+}
+
+// ValidateBrowserItem validates a Browser Item configuration
+func ValidateBrowserItem(item BrowserItem) error {
+	if item.Type != Browser {
+		return fmt.Errorf("item type must be Browser (22)")
+	}
+	if item.BrowserScript == "" {
+		return fmt.Errorf("browser_script is required for Browser items")
+	}
+	return nil
+}
+
+// ValidateItemForVersion validates an item against a specific Zabbix version
+func ValidateItemForVersion(item Item, version string) error {
+	// Parse version
+	major := 0
+	fmt.Sscanf(version, "%d", &major)
+	
+	// Browser items only supported in Zabbix 7.0+
+	if item.Type == Browser && major < 7 {
+		return fmt.Errorf("Browser items are only supported in Zabbix 7.0+, current version: %s", version)
+	}
+	
+	return nil
+}
+
+// ConvertHeadersToV7 converts Zabbix 6.0 format headers to 7.0 format
+func ConvertHeadersToV7(headersV6 HttpHeaders) []HeaderField {
+	var headersV7 []HeaderField
+	for name, value := range headersV6 {
+		headersV7 = append(headersV7, HeaderField{
+			Name:  name,
+			Value: value,
+		})
+	}
+	return headersV7
+}
+
+// ConvertHeadersToV6 converts Zabbix 7.0 format headers to 6.0 format
+func ConvertHeadersToV6(headersV7 []HeaderField) HttpHeaders {
+	headersV6 := make(HttpHeaders)
+	for _, header := range headersV7 {
+		headersV6[header.Name] = header.Value
+	}
+	return headersV6
 }

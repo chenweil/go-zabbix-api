@@ -120,7 +120,9 @@ func (api *API) lldsHeadersUnmarshal(item LLDRules) {
 		out := HttpHeaders{}
 		err := json.Unmarshal(h.RawHeaders, &out)
 		if err != nil {
-			api.printf("got error during unmarshal %s", err)
+			if api.Logger != nil {
+				api.Logger.Printf("got error during unmarshal %s", err)
+			}
 			panic(err)
 		}
 		item[i].Headers = out
@@ -175,7 +177,11 @@ func (api *API) LLDsCreate(items LLDRules) (err error) {
 		return
 	}
 
-	result := response.Result.(map[string]interface{})
+	var result map[string]interface{}
+	err = json.Unmarshal(response.Result, &result)
+	if err != nil {
+		return
+	}
 	itemids := result["itemids"].([]interface{})
 	for i, id := range itemids {
 		items[i].ItemID = id.(string)
@@ -231,7 +237,11 @@ func (api *API) LLDDeleteIDs(ids []string) (itemids []interface{}, err error) {
 		return
 	}
 
-	result := response.Result.(map[string]interface{})
+	var result map[string]interface{}
+	err = json.Unmarshal(response.Result, &result)
+	if err != nil {
+		return
+	}
 	itemids1, ok := result["ruleids"].([]interface{})
 	if !ok {
 		itemids2 := result["ruleids"].(map[string]interface{})

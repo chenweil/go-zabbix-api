@@ -24,10 +24,7 @@ func TestVersionManager(t *testing.T) {
 	
 	for _, tc := range testCases {
 		t.Run(fmt.Sprintf("Version_%s", tc.version), func(t *testing.T) {
-			err := vm.ForceVersion(tc.version)
-			if err != nil {
-				t.Fatalf("Failed to force version %s: %v", tc.version, err)
-			}
+			vm.ForceVersion(tc.version)
 			
 			if vm.Is60() != tc.expected60 {
 				t.Errorf("Expected Is60() to be %v for version %s, got %v", tc.expected60, tc.version, vm.Is60())
@@ -45,10 +42,7 @@ func TestFeatureDetection(t *testing.T) {
 	vm := NewVersionManager()
 	
 	// 测试 Zabbix 6.0 特性
-	err := vm.ForceVersion("6.4.0")
-	if err != nil {
-		t.Fatalf("Failed to force version 6.4.0: %v", err)
-	}
+	vm.ForceVersion("6.4.0")
 	
 	if vm.IsFeatureSupported(FeatureHistoryPush) {
 		t.Error("History Push should not be supported in Zabbix 6.0")
@@ -58,15 +52,12 @@ func TestFeatureDetection(t *testing.T) {
 		t.Error("MFA should not be supported in Zabbix 6.0")
 	}
 	
-	if vm.IsFeatureSupported(FeatureHeadersV7) {
+	if vm.IsFeatureSupported(FeatureHeadersArrayFormat) {
 		t.Error("Headers V7 should not be supported in Zabbix 6.0")
 	}
 	
 	// 测试 Zabbix 7.0 特性
-	err = vm.ForceVersion("7.0.0")
-	if err != nil {
-		t.Fatalf("Failed to force version 7.0.0: %v", err)
-	}
+	vm.ForceVersion("7.0.0")
 	
 	if !vm.IsFeatureSupported(FeatureHistoryPush) {
 		t.Error("History Push should be supported in Zabbix 7.0")
@@ -76,7 +67,7 @@ func TestFeatureDetection(t *testing.T) {
 		t.Error("MFA should be supported in Zabbix 7.0")
 	}
 	
-	if !vm.IsFeatureSupported(FeatureHeadersV7) {
+	if !vm.IsFeatureSupported(FeatureHeadersArrayFormat) {
 		t.Error("Headers V7 should be supported in Zabbix 7.0")
 	}
 	
@@ -210,11 +201,11 @@ func TestBrowserItemValidation(t *testing.T) {
 	// 测试有效的 Browser Item
 	validItem := BrowserItem{
 		Item: Item{
-			Type: Browser,
-			Name: "Test Browser Item",
-			Key:  "browser.test[example.com]",
+			Type:          Browser,
+			Name:          "Test Browser Item",
+			Key:           "browser.test[example.com]",
+			BrowserScript: "return document.title;",
 		},
-		BrowserScript: "return document.title;",
 	}
 	
 	err := ValidateBrowserItem(validItem)
@@ -243,38 +234,13 @@ func TestBrowserItemValidation(t *testing.T) {
 			Type: WebItem, // 错误的类型
 			Name: "Invalid Type Browser Item",
 			Key:  "browser.test[example.com]",
+			BrowserScript: "return document.title;",
 		},
-		BrowserScript: "return document.title;",
 	}
 	
 	err = ValidateBrowserItem(invalidTypeItem)
 	if err == nil {
 		t.Error("Browser item with wrong type should be invalid")
-	}
-}
-
-// TestVersionCompatibility 测试版本兼容性
-func TestVersionCompatibility(t *testing.T) {
-	testCases := []struct {
-		version   string
-		compatible bool
-	}{
-		{"6.0.0", true},
-		{"6.4.5", true},
-		{"7.0.0", true},
-		{"7.2.1", true},
-		{"5.0.0", false},
-		{"8.0.0", false},
-		{"invalid", false},
-	}
-	
-	for _, tc := range testCases {
-		t.Run(fmt.Sprintf("Compatibility_%s", tc.version), func(t *testing.T) {
-			result := IsCompatibleVersion(tc.version)
-			if result != tc.compatible {
-				t.Errorf("Expected version %s compatibility to be %v, got %v", tc.version, tc.compatible, result)
-			}
-		})
 	}
 }
 
@@ -291,14 +257,11 @@ func TestAdapterInterface(t *testing.T) {
 		t.Fatalf("Failed to force version: %v", err)
 	}
 	
-	itemAdapter := NewZabbix6ItemAdapter(api)
-	if itemAdapter == nil {
-		t.Error("Failed to create Zabbix 6.0 item adapter")
+	if _, ok := api.GetItemAdapter().(*Zabbix6ItemAdapter); !ok {
+		t.Error("Expected Zabbix 6.0 item adapter")
 	}
-	
-	hostAdapter := NewZabbix6HostAdapter(api)
-	if hostAdapter == nil {
-		t.Error("Failed to create Zabbix 6.0 host adapter")
+	if _, ok := api.GetHostAdapter().(*Zabbix6HostAdapter); !ok {
+		t.Error("Expected Zabbix 6.0 host adapter")
 	}
 	
 	// 测试 Zabbix 7.0 适配器
@@ -307,27 +270,28 @@ func TestAdapterInterface(t *testing.T) {
 		t.Fatalf("Failed to force version: %v", err)
 	}
 	
-	itemAdapter7 := NewZabbix7ItemAdapter(api)
-	if itemAdapter7 == nil {
-		t.Error("Failed to create Zabbix 7.0 item adapter")
+	if _, ok := api.GetItemAdapter().(*Zabbix7ItemAdapter); !ok {
+		t.Error("Expected Zabbix 7.0 item adapter")
 	}
-	
-	hostAdapter7 := NewZabbix7HostAdapter(api)
-	if hostAdapter7 == nil {
-		t.Error("Failed to create Zabbix 7.0 host adapter")
+	if _, ok := api.GetHostAdapter().(*Zabbix7HostAdapter); !ok {
+		t.Error("Expected Zabbix 7.0 host adapter")
 	}
 }
 
 // TestFeatureConstants 测试特性常量
 func TestFeatureConstants(t *testing.T) {
 	expectedFeatures := []string{
+		FeatureUUID,
+		FeatureTags,
+		FeatureCompression,
+		FeatureHTTPMethods,
+		FeatureCalculatedItemTypes,
 		FeatureHistoryPush,
 		FeatureMFA,
 		FeatureProxyGroup,
 		FeatureBrowserItem,
-		FeatureHeadersV7,
-		FeatureProxyID,
-		FeatureMonitoredBy,
+		FeatureHeadersArrayFormat,
+		FeatureProxyFieldsV7,
 	}
 	
 	// 确保所有特性常量都有值

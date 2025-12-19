@@ -1,5 +1,7 @@
 package zabbix
 
+import "encoding/json"
+
 type (
 	// InternalType (readonly) Whether the group is used internally by the system. An internal group cannot be deleted.
 	// see "internal" in https://www.zabbix.com/documentation/3.2/manual/api/reference/hostgroup/object
@@ -67,7 +69,11 @@ func (api *API) HostGroupsCreate(hostGroups HostGroups) (err error) {
 		return
 	}
 
-	result := response.Result.(map[string]interface{})
+	var result map[string]interface{}
+	err = json.Unmarshal(response.Result, &result)
+	if err != nil {
+		return
+	}
 	groupids := result["groupids"].([]interface{})
 	for i, id := range groupids {
 		hostGroups[i].GroupID = id.(string)
@@ -108,7 +114,11 @@ func (api *API) HostGroupsDeleteByIds(ids []string) (err error) {
 		return
 	}
 
-	result := response.Result.(map[string]interface{})
+	var result map[string]interface{}
+	err = json.Unmarshal(response.Result, &result)
+	if err != nil {
+		return
+	}
 	groupids := result["groupids"].([]interface{})
 	if len(ids) != len(groupids) {
 		err = &ExpectedMore{len(ids), len(groupids)}

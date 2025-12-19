@@ -45,7 +45,7 @@ type ProxyGroups []ProxyGroup
 // https://www.zabbix.com/documentation/7.0/manual/api/reference/proxygroup/create
 func (api *API) ProxyGroupCreate(proxyGroups ProxyGroups) error {
 	if !api.versionManager.IsFeatureSupported(FeatureProxyGroup) {
-		return fmt.Errorf("Proxy Group not supported in Zabbix version %s", api.versionManager.GetVersion())
+		return fmt.Errorf("Proxy Group not supported in Zabbix version %s", api.versionManager.serverVersion)
 	}
 
 	response, err := api.CallWithError("proxygroup.create", proxyGroups)
@@ -53,7 +53,11 @@ func (api *API) ProxyGroupCreate(proxyGroups ProxyGroups) error {
 		return err
 	}
 
-	result := response.Result.(map[string]interface{})
+	var result map[string]interface{}
+	err = json.Unmarshal(response.Result, &result)
+	if err != nil {
+		return err
+	}
 	proxyGroupIDs := result["proxy_groupids"].([]interface{})
 	for i, id := range proxyGroupIDs {
 		proxyGroups[i].ProxyGroupID = id.(string)
@@ -65,7 +69,7 @@ func (api *API) ProxyGroupCreate(proxyGroups ProxyGroups) error {
 // https://www.zabbix.com/documentation/7.0/manual/api/reference/proxygroup/get
 func (api *API) ProxyGroupGet(params Params) (ProxyGroups, error) {
 	if !api.versionManager.IsFeatureSupported(FeatureProxyGroup) {
-		return nil, fmt.Errorf("Proxy Group not supported in Zabbix version %s", api.versionManager.GetVersion())
+		return nil, fmt.Errorf("Proxy Group not supported in Zabbix version %s", api.versionManager.serverVersion)
 	}
 
 	if _, present := params["output"]; !present {
@@ -81,7 +85,7 @@ func (api *API) ProxyGroupGet(params Params) (ProxyGroups, error) {
 // https://www.zabbix.com/documentation/7.0/manual/api/reference/proxygroup/update
 func (api *API) ProxyGroupUpdate(proxyGroups ProxyGroups) error {
 	if !api.versionManager.IsFeatureSupported(FeatureProxyGroup) {
-		return fmt.Errorf("Proxy Group not supported in Zabbix version %s", api.versionManager.GetVersion())
+		return fmt.Errorf("Proxy Group not supported in Zabbix version %s", api.versionManager.serverVersion)
 	}
 
 	_, err := api.CallWithError("proxygroup.update", proxyGroups)
@@ -92,7 +96,7 @@ func (api *API) ProxyGroupUpdate(proxyGroups ProxyGroups) error {
 // https://www.zabbix.com/documentation/7.0/manual/api/reference/proxygroup/delete
 func (api *API) ProxyGroupDelete(proxyGroups ProxyGroups) error {
 	if !api.versionManager.IsFeatureSupported(FeatureProxyGroup) {
-		return fmt.Errorf("Proxy Group not supported in Zabbix version %s", api.versionManager.GetVersion())
+		return fmt.Errorf("Proxy Group not supported in Zabbix version %s", api.versionManager.serverVersion)
 	}
 
 	ids := make([]string, len(proxyGroups))
@@ -217,7 +221,7 @@ type Proxies7 []Proxy7
 // Proxy7Create Wrapper for proxy.create with Zabbix 7.0+ features
 func (api *API) Proxy7Create(proxies Proxies7) error {
 	if !api.versionManager.IsFeatureSupported(FeatureProxyGroup) {
-		return fmt.Errorf("Enhanced proxy features not supported in Zabbix version %s", api.versionManager.GetVersion())
+		return fmt.Errorf("Enhanced proxy features not supported in Zabbix version %s", api.versionManager.serverVersion)
 	}
 
 	response, err := api.CallWithError("proxy.create", proxies)
@@ -225,7 +229,11 @@ func (api *API) Proxy7Create(proxies Proxies7) error {
 		return err
 	}
 
-	result := response.Result.(map[string]interface{})
+	var result map[string]interface{}
+	err = json.Unmarshal(response.Result, &result)
+	if err != nil {
+		return err
+	}
 	proxyIDs := result["proxyids"].([]interface{})
 	for i, id := range proxyIDs {
 		proxies[i].ProxyID = id.(string)
@@ -236,7 +244,7 @@ func (api *API) Proxy7Create(proxies Proxies7) error {
 // Proxy7Get Wrapper for proxy.get with Zabbix 7.0+ features
 func (api *API) Proxy7Get(params Params) (Proxies7, error) {
 	if !api.versionManager.IsFeatureSupported(FeatureProxyGroup) {
-		return nil, fmt.Errorf("Enhanced proxy features not supported in Zabbix version %s", api.versionManager.GetVersion())
+		return nil, fmt.Errorf("Enhanced proxy features not supported in Zabbix version %s", api.versionManager.serverVersion)
 	}
 
 	if _, present := params["output"]; !present {
@@ -251,7 +259,7 @@ func (api *API) Proxy7Get(params Params) (Proxies7, error) {
 // Proxy7Update Wrapper for proxy.update with Zabbix 7.0+ features
 func (api *API) Proxy7Update(proxies Proxies7) error {
 	if !api.versionManager.IsFeatureSupported(FeatureProxyGroup) {
-		return fmt.Errorf("Enhanced proxy features not supported in Zabbix version %s", api.versionManager.GetVersion())
+		return fmt.Errorf("Enhanced proxy features not supported in Zabbix version %s", api.versionManager.serverVersion)
 	}
 
 	_, err := api.CallWithError("proxy.update", proxies)

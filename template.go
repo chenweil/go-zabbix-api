@@ -1,5 +1,7 @@
 package zabbix
 
+import "encoding/json"
+
 // Template represent Zabbix Template type returned from Zabbix API
 // https://www.zabbix.com/documentation/3.2/manual/api/reference/template/object
 type Template struct {
@@ -61,7 +63,11 @@ func (api *API) TemplatesCreate(templates Templates) (err error) {
 		return
 	}
 
-	result := response.Result.(map[string]interface{})
+	var result map[string]interface{}
+	err = json.Unmarshal(response.Result, &result)
+	if err != nil {
+		return
+	}
 	templateids := result["templateids"].([]interface{})
 	for i, id := range templateids {
 		templates[i].TemplateID = id.(string)
@@ -103,7 +109,11 @@ func (api *API) TemplatesDeleteByIds(ids []string) (err error) {
 		return
 	}
 
-	result := response.Result.(map[string]interface{})
+	var result map[string]interface{}
+	err = json.Unmarshal(response.Result, &result)
+	if err != nil {
+		return
+	}
 	templateids := result["templateids"].([]interface{})
 	if len(ids) != len(templateids) {
 		err = &ExpectedMore{len(ids), len(templateids)}
