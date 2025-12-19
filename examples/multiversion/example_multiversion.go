@@ -83,9 +83,9 @@ func main() {
 		GroupIds: zabbix.HostGroupIDs{{GroupID: "15"}}, // Example group ID
 		Interfaces: zabbix.HostInterfaces{
 			{
-				Type:        1, // Zabbix agent
-				Main:        1,
-				UseIP:       1,
+				Type:        zabbix.Agent, // Zabbix agent
+				Main:        "1",
+				UseIP:       "1",
 				DNS:         "",
 				IP:          "192.168.1.100",
 				Port:        "10050",
@@ -101,8 +101,13 @@ func main() {
 		host.ProxyHostID = "10085" // Old field name in 6.0
 	}
 	
-	// Create host using adapter
-	err = api.CreateHosts(zabbix.Hosts{host})
+	// Create host using adapter (automatically handles version differences)
+	hostAdapter := api.GetHostAdapter()
+	if hostAdapter != nil {
+		err = hostAdapter.CreateHosts(zabbix.Hosts{host})
+	} else {
+		err = api.HostsCreate(zabbix.Hosts{host})
+	}
 	if err != nil {
 		log.Printf("Failed to create host: %v", err)
 	} else {
@@ -110,7 +115,7 @@ func main() {
 	}
 	
 	// Example: Use History Push API (Zabbix 7.0+ only)
-	if api.IsFeatureSupported(zabbix.FeatureHistoryPush) {
+	if api.SupportsHistoryPush() {
 		historyData := []zabbix.HistoryData{
 			{
 				Host:  "example-host",
@@ -119,13 +124,8 @@ func main() {
 				Clock: 1609459200, // Unix timestamp
 			},
 		}
-		
-		err = api.HistoryPush(historyData)
-		if err != nil {
-			log.Printf("Failed to push history data: %v", err)
-		} else {
-			fmt.Println("History data pushed successfully")
-		}
+		fmt.Printf("History Push 支持，准备推送 %d 条数据（当前库未提供封装方法）\n", len(historyData))
+		// 可手动调用: api.CallWithError(\"history.push\", historyData)
 	} else {
 		fmt.Println("History Push API not available in this Zabbix version")
 	}
@@ -139,7 +139,7 @@ func main() {
 		log.Printf("Failed to force version: %v", err)
 	} else {
 		fmt.Printf("Forced to version: %s\n", api.GetServerVersion())
-		fmt.Printf("Headers V7 supported: %t\n", api.IsFeatureSupported(zabbix.FeatureHeadersV7))
+		fmt.Printf("Headers 数组格式支持: %t\n", api.IsFeatureSupported(zabbix.FeatureHeadersArrayFormat))
 	}
 	
 	// Force Zabbix 7.0 mode
@@ -148,7 +148,7 @@ func main() {
 		log.Printf("Failed to force version: %v", err)
 	} else {
 		fmt.Printf("Forced to version: %s\n", api.GetServerVersion())
-		fmt.Printf("Headers V7 supported: %t\n", api.IsFeatureSupported(zabbix.FeatureHeadersV7))
+		fmt.Printf("Headers 数组格式支持: %t\n", api.IsFeatureSupported(zabbix.FeatureHeadersArrayFormat))
 	}
 	
 	fmt.Println("Example completed successfully!")

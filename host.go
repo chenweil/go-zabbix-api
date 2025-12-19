@@ -2,6 +2,7 @@ package zabbix
 
 import (
 	"encoding/json"
+	"fmt"
 )
 
 type (
@@ -37,12 +38,12 @@ const (
 )
 
 const (
-	// Disabled inventory mode (default)
-	Disabled InventoryMode = -1
-	// Manual inventory mode
-	Manual InventoryMode = 0
-	// Automatic inventory mode
-	Automatic InventoryMode = 1
+	// InventoryDisabled inventory mode (default)
+	InventoryDisabled InventoryMode = -1
+	// InventoryManual inventory mode
+	InventoryManual InventoryMode = 0
+	// InventoryAutomatic inventory mode
+	InventoryAutomatic InventoryMode = 1
 )
 
 const (
@@ -80,23 +81,15 @@ type Host struct {
 	TemplateIDsClear TemplateIDs    `json:"templates_clear,omitempty"`
 	// templates are read back from this one
 	ParentTemplateIDs TemplateIDs `json:"parentTemplates,omitempty"`
-	
+
 	// Multi-version proxy support
-	ProxyHostID string      `json:"proxy_hostid,omitempty"`  // Zabbix 6.0 format
+	ProxyHostID string      `json:"proxy_hostid,omitempty"` // Zabbix 6.0 format
 	ProxyID     string      `json:"proxyid,omitempty"`      // Zabbix 7.0 format
 	MonitoredBy MonitoredBy `json:"monitored_by,omitempty"` // Zabbix 7.0+ required field
 }
 
 // Hosts is an array of Host
 type Hosts []Host
-
-// Tag structure for Zabbix 6.0 compatibility (reused from trigger.go)
-type Tag struct {
-	Tag   string `json:"tag"`
-	Value string `json:"value,omitempty"`
-}
-
-type Tags []Tag
 
 // HostsGet Wrapper for host.get
 // https://www.zabbix.com/documentation/3.2/manual/api/reference/host/get
@@ -147,7 +140,11 @@ func (api *API) HostsCreate(hosts Hosts) (err error) {
 		return
 	}
 
-	result := response.Result.(map[string]interface{})
+	var result map[string]interface{}
+	err = json.Unmarshal(response.Result, &result)
+	if err != nil {
+		return
+	}
 	hostids := result["hostids"].([]interface{})
 
 	for i := range hosts {
@@ -192,16 +189,16 @@ func (adapter *Zabbix6HostAdapter) CreateHosts(hosts Hosts) error {
 	// Prepare hosts for Zabbix 6.0 format
 	for i := range hosts {
 		host := &hosts[i]
-		
+
 		// Convert Zabbix 7.0 proxy fields to Zabbix 6.0 format if needed
 		if host.ProxyID != "" && host.ProxyHostID == "" {
 			host.ProxyHostID = host.ProxyID
 		}
-		
+
 		// Clear Zabbix 7.0 specific fields
 		host.MonitoredBy = 0 // Default to server monitoring
 	}
-	
+
 	return adapter.api.HostsCreate(hosts)
 }
 
@@ -213,16 +210,16 @@ func (adapter *Zabbix6HostAdapter) UpdateHosts(hosts Hosts) error {
 	// Prepare hosts for Zabbix 6.0 format
 	for i := range hosts {
 		host := &hosts[i]
-		
+
 		// Convert Zabbix 7.0 proxy fields to Zabbix 6.0 format if needed
 		if host.ProxyID != "" && host.ProxyHostID == "" {
 			host.ProxyHostID = host.ProxyID
 		}
-		
+
 		// Clear Zabbix 7.0 specific fields
 		host.MonitoredBy = 0 // Default to server monitoring
 	}
-	
+
 	return adapter.api.HostsUpdate(hosts)
 }
 
@@ -239,18 +236,18 @@ func (adapter *Zabbix7HostAdapter) CreateHosts(hosts Hosts) error {
 	// Prepare hosts for Zabbix 7.0 format
 	for i := range hosts {
 		host := &hosts[i]
-		
+
 		// Convert Zabbix 6.0 proxy fields to Zabbix 7.0 format if needed
 		if host.ProxyHostID != "" && host.ProxyID == "" {
 			host.ProxyID = host.ProxyHostID
 		}
-		
+
 		// Set monitored_by if proxyid is specified
 		if host.ProxyID != "" && host.MonitoredBy == 0 {
 			host.MonitoredBy = MonitoredByProxy
 		}
 	}
-	
+
 	return adapter.api.HostsCreate(hosts)
 }
 
@@ -262,21 +259,43 @@ func (adapter *Zabbix7HostAdapter) UpdateHosts(hosts Hosts) error {
 	// Prepare hosts for Zabbix 7.0 format
 	for i := range hosts {
 		host := &hosts[i]
-		
+
 		// Convert Zabbix 6.0 proxy fields to Zabbix 7.0 format if needed
 		if host.ProxyHostID != "" && host.ProxyID == "" {
 			host.ProxyID = host.ProxyHostID
 		}
-		
+
 		// Set monitored_by if proxyid is specified
 		if host.ProxyID != "" && host.MonitoredBy == 0 {
 			host.MonitoredBy = MonitoredByProxy
 		}
 	}
-	
+
 	return adapter.api.HostsUpdate(hosts)
 }
 
 func (adapter *Zabbix7HostAdapter) DeleteHosts(hostIds []string) error {
 	return adapter.api.HostsDeleteByIds(hostIds)
+}
+
+// ValidateHostForVersion validates a host configuration against a specific Zabbix version
+func ValidateHostForVersion(host Host, version string) error {
+	// Parse version
+	major := 0
+	fmt.Sscanf(version, "%d", &major)
+	
+	// Zabbix 7.0+ specific validations
+	if major >= 7 {
+		// monitored_by is required when proxyid is specified
+		if host.ProxyID != "" && host.MonitoredBy == 0 {
+			return fmt.Errorf("monitored_by is required for Zabbix 7.0+ when proxyid is set")
+		}
+
+		// Check for new fields in Zabbix 7.0
+		if host.MonitoredBy != 0 && host.MonitoredBy != MonitoredByServer && host.MonitoredBy != MonitoredByProxy && host.MonitoredBy != MonitoredByProxyGroup {
+			return fmt.Errorf("invalid monitored_by value for Zabbix 7.0+: %d", host.MonitoredBy)
+		}
+	}
+	
+	return nil
 }

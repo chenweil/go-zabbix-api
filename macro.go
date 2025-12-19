@@ -1,5 +1,7 @@
 package zabbix
 
+import "encoding/json"
+
 // Macro represent Zabbix User MAcro object
 // https://www.zabbix.com/documentation/3.2/manual/api/reference/usermacro/object
 type Macro struct {
@@ -46,7 +48,11 @@ func (api *API) MacrosCreate(macros Macros) error {
 		return err
 	}
 
-	result := response.Result.(map[string]interface{})
+	var result map[string]interface{}
+	err = json.Unmarshal(response.Result, &result)
+	if err != nil {
+		return err
+	}
 	macroids := result["hostmacroids"].([]interface{})
 	for i, id := range macroids {
 		macros[i].HostID = id.(string)
@@ -66,8 +72,15 @@ func (api *API) MacrosUpdate(macros Macros) (err error) {
 //https://www.zabbix.com/documentation/3.2/manual/api/reference/usermacro/delete
 func (api *API) MacrosDeleteByIDs(ids []string) (err error) {
 	response, err := api.CallWithError("usermacro.delete", ids)
+	if err != nil {
+		return
+	}
 
-	result := response.Result.(map[string]interface{})
+	var result map[string]interface{}
+	err = json.Unmarshal(response.Result, &result)
+	if err != nil {
+		return
+	}
 	hostmacroids := result["hostmacroids"].([]interface{})
 	if len(ids) != len(hostmacroids) {
 		err = &ExpectedMore{len(ids), len(hostmacroids)}

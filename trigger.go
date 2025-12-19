@@ -1,5 +1,7 @@
 package zabbix
 
+import "encoding/json"
+
 type (
 	// SeverityType of a trigger
 	// Zabbix severity see : https://www.zabbix.com/documentation/3.2/manual/api/reference/trigger/object
@@ -153,7 +155,11 @@ func (api *API) TriggersCreate(triggers Triggers) (err error) {
 		return
 	}
 
-	result := response.Result.(map[string]interface{})
+	var result map[string]interface{}
+	err = json.Unmarshal(response.Result, &result)
+	if err != nil {
+		return
+	}
 	triggerids := result["triggerids"].([]interface{})
 	for i, id := range triggerids {
 		triggers[i].TriggerID = id.(string)
@@ -166,7 +172,11 @@ func (api *API) ProtoTriggersCreate(triggers Triggers) (err error) {
 		return
 	}
 
-	result := response.Result.(map[string]interface{})
+	var result map[string]interface{}
+	err = json.Unmarshal(response.Result, &result)
+	if err != nil {
+		return
+	}
 	triggerids := result["triggerids"].([]interface{})
 	for i, id := range triggerids {
 		triggers[i].TriggerID = id.(string)
@@ -250,7 +260,11 @@ func (api *API) TriggersDeleteIDs(ids []string) (triggerids []interface{}, err e
 		return
 	}
 
-	result := response.Result.(map[string]interface{})
+	var result map[string]interface{}
+	err = json.Unmarshal(response.Result, &result)
+	if err != nil {
+		return
+	}
 	triggerids1, ok := result["triggerids"].([]interface{})
 	if !ok {
 		triggerids2 := result["triggerids"].(map[string]interface{})
@@ -268,7 +282,11 @@ func (api *API) ProtoTriggersDeleteIDs(ids []string) (triggerids []interface{}, 
 		return
 	}
 
-	result := response.Result.(map[string]interface{})
+	var result map[string]interface{}
+	err = json.Unmarshal(response.Result, &result)
+	if err != nil {
+		return
+	}
 	triggerids1, ok := result["triggerids"].([]interface{})
 	if !ok {
 		triggerids2 := result["triggerids"].(map[string]interface{})

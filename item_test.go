@@ -6,9 +6,9 @@ import (
 	zapi "github.com/tpretz/go-zabbix-api"
 )
 
-func CreateItem(app *zapi.Application, t *testing.T) *zapi.Item {
+func CreateItem(host *zapi.Host, t *testing.T) *zapi.Item {
 	items := zapi.Items{{
-		HostID: app.HostID,
+		HostID: host.HostID,
 		Key:    "key.lala.laa",
 		Name:   "name for key",
 		Type:   zapi.ZabbixTrapper,
@@ -36,10 +36,7 @@ func TestItems(t *testing.T) {
 	host := CreateHost(group, t)
 	defer DeleteHost(host, t)
 
-	app := CreateApplication(host, t)
-	defer DeleteApplication(app, t)
-
-	items, err := api.ItemsGetByApplicationID(app.ApplicationID)
+	items, err := api.ItemsGetByHostIds([]string{host.HostID})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -47,7 +44,7 @@ func TestItems(t *testing.T) {
 		t.Fatal("Found items")
 	}
 
-	item := CreateItem(app, t)
+	item := CreateItem(host, t)
 
 	_, err = api.ItemGetByID(item.ItemID)
 	if err != nil {

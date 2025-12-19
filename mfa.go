@@ -27,13 +27,13 @@ const (
 
 // MFA represents a multi-factor authentication configuration
 type MFA struct {
-	MFAID        string   `json:"mfaid,omitempty"`
-	Name         string   `json:"name"`
-	Type         MFAType  `json:"type,string"`
-	HashFunction string   `json:"hash_function,omitempty"`
-	CodeLength   int      `json:"code_length,omitempty"`
-	Status       MFAStatus `json:"status,string"`
-	APIAccess    string   `json:"api_access,omitempty"`
+	MFAID        string        `json:"mfaid,omitempty"`
+	Name         string        `json:"name"`
+	Type         MFAType       `json:"type,string"`
+	HashFunction string        `json:"hash_function,omitempty"`
+	CodeLength   int           `json:"code_length,omitempty"`
+	Status       MFAStatus     `json:"status,string"`
+	APIAccess    string        `json:"api_access,omitempty"`
 	UserGroups   MFAUserGroups `json:"user_groups,omitempty"`
 }
 
@@ -53,7 +53,7 @@ type MFAs []MFA
 // https://www.zabbix.com/documentation/7.0/manual/api/reference/mfa/create
 func (api *API) MFACreate(mfas MFAs) error {
 	if !api.versionManager.IsFeatureSupported(FeatureMFA) {
-		return fmt.Errorf("MFA not supported in Zabbix version %s", api.versionManager.GetVersion())
+		return fmt.Errorf("MFA not supported in Zabbix version %s", api.versionManager.serverVersion)
 	}
 
 	response, err := api.CallWithError("mfa.create", mfas)
@@ -61,7 +61,11 @@ func (api *API) MFACreate(mfas MFAs) error {
 		return err
 	}
 
-	result := response.Result.(map[string]interface{})
+	var result map[string]interface{}
+	err = json.Unmarshal(response.Result, &result)
+	if err != nil {
+		return err
+	}
 	mfaids := result["mfaids"].([]interface{})
 	for i, id := range mfaids {
 		mfas[i].MFAID = id.(string)
@@ -73,13 +77,13 @@ func (api *API) MFACreate(mfas MFAs) error {
 // https://www.zabbix.com/documentation/7.0/manual/api/reference/mfa/get
 func (api *API) MFAGet(params Params) (MFAs, error) {
 	if !api.versionManager.IsFeatureSupported(FeatureMFA) {
-		return nil, fmt.Errorf("MFA not supported in Zabbix version %s", api.versionManager.GetVersion())
+		return nil, fmt.Errorf("MFA not supported in Zabbix version %s", api.versionManager.serverVersion)
 	}
 
 	if _, present := params["output"]; !present {
 		params["output"] = "extend"
 	}
-	
+
 	var res MFAs
 	err := api.CallWithErrorParse("mfa.get", params, &res)
 	return res, err
@@ -89,7 +93,7 @@ func (api *API) MFAGet(params Params) (MFAs, error) {
 // https://www.zabbix.com/documentation/7.0/manual/api/reference/mfa/update
 func (api *API) MFAUpdate(mfas MFAs) error {
 	if !api.versionManager.IsFeatureSupported(FeatureMFA) {
-		return fmt.Errorf("MFA not supported in Zabbix version %s", api.versionManager.GetVersion())
+		return fmt.Errorf("MFA not supported in Zabbix version %s", api.versionManager.serverVersion)
 	}
 
 	_, err := api.CallWithError("mfa.update", mfas)
@@ -100,7 +104,7 @@ func (api *API) MFAUpdate(mfas MFAs) error {
 // https://www.zabbix.com/documentation/7.0/manual/api/reference/mfa/delete
 func (api *API) MFADelete(mfas MFAs) error {
 	if !api.versionManager.IsFeatureSupported(FeatureMFA) {
-		return fmt.Errorf("MFA not supported in Zabbix version %s", api.versionManager.GetVersion())
+		return fmt.Errorf("MFA not supported in Zabbix version %s", api.versionManager.serverVersion)
 	}
 
 	ids := make([]string, len(mfas))
@@ -135,7 +139,7 @@ func (api *API) MFAGetByID(id string) (*MFA, error) {
 // https://www.zabbix.com/documentation/7.0/manual/api/reference/user/resetotp
 func (api *API) UserResetTOTP(userIDs []string) error {
 	if !api.versionManager.IsFeatureSupported(FeatureMFA) {
-		return fmt.Errorf("MFA not supported in Zabbix version %s", api.versionManager.GetVersion())
+		return fmt.Errorf("MFA not supported in Zabbix version %s", api.versionManager.serverVersion)
 	}
 
 	params := map[string][]string{"userids": userIDs}
@@ -146,64 +150,4 @@ func (api *API) UserResetTOTP(userIDs []string) error {
 // UserResetTOTPByUser Resets TOTP for a single user
 func (api *API) UserResetTOTPByUser(userID string) error {
 	return api.UserResetTOTP([]string{userID})
-}
-
-// User represents a user with MFA fields
-type User struct {
-	UserID     string    `json:"userid,omitempty"`
-	Username   string    `json:"username"`
-	Name       string    `json:"name,omitempty"`
-	Surname    string    `json:"surname,omitempty"`
-	MFAStatus  MFAStatus `json:"mfa_status,string,omitempty"`
-	MFAID      string    `json:"mfaid,omitempty"`
-	TOTPSecret string    `json:"totp_secret,omitempty"`
-}
-
-// Users is an array of User
-type Users []User
-
-// UsersGet Wrapper for user.get with MFA support
-func (api *API) UsersGet(params Params) (Users, error) {
-	if _, present := params["output"]; !present {
-		params["output"] = "extend"
-	}
-	
-	// Add MFA fields if supported
-	if api.versionManager.IsFeatureSupported(FeatureMFA) {
-		if _, present := params["selectUsrgrps"]; !present {
-			params["selectUsrgrps"] = "extend"
-		}
-	}
-	
-	var res Users
-	err := api.CallWithErrorParse("user.get", params, &res)
-	return res, err
-}
-
-// UserGetByID Gets user by ID
-func (api *API) UserGetByID(id string) (*User, error) {
-	users, err := api.UsersGet(Params{"userids": id})
-	if err != nil {
-		return nil, err
-	}
-
-	if len(users) != 1 {
-		e := ExpectedOneResult(len(users))
-		return nil, &e
-	}
-	return &users[0], nil
-}
-
-// UserGetByUsername Gets user by username
-func (api *API) UserGetByUsername(username string) (*User, error) {
-	users, err := api.UsersGet(Params{"filter": map[string]string{"username": username}})
-	if err != nil {
-		return nil, err
-	}
-
-	if len(users) != 1 {
-		e := ExpectedOneResult(len(users))
-		return nil, &e
-	}
-	return &users[0], nil
 }

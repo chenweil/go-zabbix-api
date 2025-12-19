@@ -28,7 +28,9 @@ func init() {
 	_host += "-testing"
 
 	if os.Getenv("TEST_ZABBIX_URL") == "" {
-		log.Fatal("Set environment variables TEST_ZABBIX_URL (and optionally TEST_ZABBIX_USER and TEST_ZABBIX_PASSWORD)")
+		// Integration tests require a real Zabbix server. When not configured,
+		// tests that call getAPI will be skipped.
+		return
 	}
 }
 
@@ -42,6 +44,9 @@ func getAPI(t *testing.T) *zapi.API {
 	}
 
 	url, user, password := os.Getenv("TEST_ZABBIX_URL"), os.Getenv("TEST_ZABBIX_USER"), os.Getenv("TEST_ZABBIX_PASSWORD")
+	if url == "" {
+		t.Skip("Set environment variables TEST_ZABBIX_URL (and optionally TEST_ZABBIX_USER and TEST_ZABBIX_PASSWORD) to run integration tests")
+	}
 
 	// Zabbix client connection configuration
 	var c zapi.Config
@@ -69,12 +74,16 @@ func getAPI(t *testing.T) *zapi.API {
 
 func TestBadCalls(t *testing.T) {
 	api := getAPI(t)
-	res, err := api.Call("", nil)
-	if err != nil {
-		t.Fatal(err)
+	_, err := api.CallWithError("", nil)
+	if err == nil {
+		t.Fatal("Expected error for bad call")
 	}
-	if res.Error.Code != -32602 {
-		t.Errorf("Expected code -32602, got %s", res.Error)
+	zerr, ok := err.(*zapi.Error)
+	if !ok {
+		t.Fatalf("Expected *zapi.Error, got %T", err)
+	}
+	if zerr.Code != -32602 {
+		t.Errorf("Expected code -32602, got %d", zerr.Code)
 	}
 }
 
