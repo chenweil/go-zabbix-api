@@ -1,0 +1,11 @@
+{
+  "version": 1,
+  "workspace": {
+    "name": "go-zabbix-api",
+    "createdAt": 1771685590225,
+    "preset": "starter"
+  },
+  "authorizedRoots": [
+    "/Users/chenweilong/www/go-zabbix-api"
+  ]
+}
