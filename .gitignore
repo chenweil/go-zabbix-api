@@ -1,1 +1,19 @@
 .vagrant/
+
+# Go binaries
+*.exe
+*.dll
+*.so
+*.dylib
+
+# Test binary, built with 'go test -c'
+*.test
+
+# Output of the go coverage tool
+*.out
+
+# Compiled binaries
+/zabbix-api-server
+/zabbix-cli
+/cmd/zabbix-api-server/zabbix-api-server
+/cmd/zabbix-cli/zabbix-cli

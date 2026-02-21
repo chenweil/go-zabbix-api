@@ -1,5 +1,7 @@
 package zabbix
 
+import "encoding/json"
+
 type (
 	GraphType string
 	GraphAxis string
@@ -135,7 +137,10 @@ func (api *API) GraphsCreate(hostGroups Graphs) (err error) {
 		return
 	}
 
-	result := response.Result.(map[string]interface{})
+	var result map[string]interface{}
+	if err = json.Unmarshal(response.Result, &result); err != nil {
+		return
+	}
 	groupids := result["graphids"].([]interface{})
 	for i, id := range groupids {
 		hostGroups[i].GraphID = id.(string)
@@ -148,7 +153,10 @@ func (api *API) GraphProtosCreate(hostGroups Graphs) (err error) {
 		return
 	}
 
-	result := response.Result.(map[string]interface{})
+	var result map[string]interface{}
+	if err = json.Unmarshal(response.Result, &result); err != nil {
+		return
+	}
 	groupids := result["graphids"].([]interface{})
 	for i, id := range groupids {
 		hostGroups[i].GraphID = id.(string)
@@ -207,7 +215,10 @@ func (api *API) GraphsDeleteByIds(ids []string) (err error) {
 		return
 	}
 
-	result := response.Result.(map[string]interface{})
+	var result map[string]interface{}
+	if err = json.Unmarshal(response.Result, &result); err != nil {
+		return
+	}
 	groupids := result["graphids"].([]interface{})
 	if len(ids) != len(groupids) {
 		err = &ExpectedMore{len(ids), len(groupids)}
@@ -220,7 +231,10 @@ func (api *API) GraphProtosDeleteByIds(ids []string) (err error) {
 		return
 	}
 
-	result := response.Result.(map[string]interface{})
+	var result map[string]interface{}
+	if err = json.Unmarshal(response.Result, &result); err != nil {
+		return
+	}
 	groupids := result["graphids"].([]interface{})
 	if len(ids) != len(groupids) {
 		err = &ExpectedMore{len(ids), len(groupids)}
