@@ -181,4 +181,45 @@ go test -v
 Documentation is available on [godoc.org](https://godoc.org/github.com/tpretz/go-zabbix-api).
 Also, Rafael Fernandes dos Santos wrote a [great article](http://www.sourcecode.net.br/2014/02/zabbix-api-with-golang.html) about using and extending this package.
 
+## Deployment
+
+### Lighthouse Deployment
+
+The project includes a Zabbix API Server that has been deployed to Tencent Lighthouse:
+
+| Endpoint | URL |
+|----------|-----|
+| **API Base URL** | http://49.233.132.5:8080 |
+| **Health Check** | http://49.233.132.5:8080/health |
+| **API Info** | http://49.233.132.5:8080/ |
+
+### API Endpoints
+
+- `GET /` - Service information
+- `GET /health` - Health check
+- `GET /api/version?url={zabbix_url}` - Get Zabbix server version
+- `GET /api/hosts?url={zabbix_url}&user={username}&password={password}` - List hosts
+- `GET /api/groups?url={zabbix_url}&user={username}&password={password}` - List host groups
+
+### Local Development
+
+```bash
+# Build the API server
+cd cmd/zabbix-api-server
+go build -o zabbix-api-server .
+
+# Run the server
+PORT=8080 ./zabbix-api-server
+```
+
+### Docker Deployment
+
+```bash
+# Build Docker image
+docker build -t zabbix-api-server:latest .
+
+# Run container
+docker run -d --name zabbix-api-server -p 8080:8080 zabbix-api-server:latest
+```
+
 License: Simplified BSD License (see [LICENSE](LICENSE)).

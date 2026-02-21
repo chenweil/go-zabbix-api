@@ -263,7 +263,7 @@ func (api *API) CheckAuthentication(token string) (valid bool, err error) {
 
 // Logout logs out from the Zabbix API and clears the auth token.
 func (api *API) Logout() (err error) {
-	_, err = api.CallWithError("user.logout", nil)
+	_, err = api.CallWithError("user.logout", Params{})
 	if err == nil {
 		api.Auth = ""
 	}
@@ -272,8 +272,47 @@ func (api *API) Logout() (err error) {
 
 // Version returns the version of the Zabbix API.
 func (api *API) Version() (version string, err error) {
-	response, err := api.CallWithError("apiinfo.version", nil)
+	request := request{
+		Jsonrpc: "2.0",
+		Method:  "apiinfo.version",
+		Params:  Params{},
+		ID:      atomic.AddInt32(&api.id, 1),
+	}
+
+	requestBytes, err := json.Marshal(request)
 	if err != nil {
+		return
+	}
+
+	httpRequest, err := http.NewRequest("POST", api.url, bytes.NewBuffer(requestBytes))
+	if err != nil {
+		return
+	}
+
+	httpRequest.Header.Set("Content-Type", "application/json-rpc")
+	if api.UserAgent != "" {
+		httpRequest.Header.Set("User-Agent", api.UserAgent)
+	}
+
+	httpResponse, err := api.c.Do(httpRequest)
+	if err != nil {
+		return
+	}
+	defer httpResponse.Body.Close()
+
+	responseBytes, err := ioutil.ReadAll(httpResponse.Body)
+	if err != nil {
+		return
+	}
+
+	response := &RawResponse{}
+	err = json.Unmarshal(responseBytes, response)
+	if err != nil {
+		return
+	}
+
+	if response.Error != nil {
+		err = response.Error
 		return
 	}
 
